@@ -1,0 +1,18 @@
+# 统一换行符：源码一律 LF，避免 Windows 开发 + Linux 容器构建时出现
+# 「本地改了但 CI 里 diff 全红」的噪音。
+* text=auto eol=lf
+
+# Windows 脚本保留 CRLF
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# 二进制文件不做任何转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.woff binary
+*.woff2 binary
