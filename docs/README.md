@@ -1,0 +1,127 @@
+# 项目文档索引
+
+FastAPI 重写版博客后端。总体方案见 [rewrite-plan.md](./rewrite-plan.md)。
+
+## 模块划分
+
+每个模块一个目录，内含 `design.md`（设计方案）和 `api.md`（接口文档）。
+开发顺序即编号顺序，后续模块依赖前序模块。
+
+| 编号 | 模块 | 目录 | 职责 | 依赖 |
+|---|---|---|---|---|
+| 00 | 基础设施 | [00-foundation](./00-foundation/) | 配置、数据库、Redis、MinIO、日志、统一响应、错误码、鉴权依赖 | — |
+| 01 | 认证 | [01-auth](./01-auth/) | 注册、登录、验证码、双 Token、刷新、登出 | 00 |
+| 02 | 用户 | [02-user](./02-user/) | 资料、头像、改密、改邮箱 | 00、01 |
+| 03 | 文章 | [03-article](./03-article/) | 文章 CRUD、列表筛选、详情、点赞、图片上传 | 00、01、02、05 |
+| 04 | 评论 | [04-comment](./04-comment/) | 两级评论、删除 | 00、01、03 |
+| 05 | 分类与标签 | [05-taxonomy](./05-taxonomy/) | 分类、标签、文章关联 | 00、01 |
+| 06 | 关于页 | [06-about](./06-about/) | 单例内容读写 | 00、01 |
+| 07 | AI 模型 | [07-llm](./07-llm/) | 模型配置 CRUD、连接测试、文章摘要 | 00、01、03 |
+
+> 上传接口 `/api/v1/admin/upload` 归在 03-article（文章封面图与正文图片），
+> 用户头像上传归在 02-user，两者共用 00-foundation 里的 `MinioStorage` 类。
+
+## 文档模板
+
+### `design.md` 必须包含
+
+1. **职责与边界** —— 这个模块做什么、不做什么
+2. **类设计** —— 类名、职责、关键方法签名、依赖关系（面向对象，不允许散装函数）
+3. **数据模型** —— 表结构、字段类型、索引
+4. **核心流程** —— 至少一条主流程的分步说明
+5. **错误码** —— 本模块会抛出的业务错误
+6. **测试要点** —— 单测/集成测试要覆盖的场景
+7. **开放问题** —— 需要用户拍板的点
+
+### `api.md` 必须包含
+
+1. 接口总览表（方法、路径、鉴权、一句话说明）
+2. 每个接口的请求参数表、请求示例、成功响应、失败响应
+3. 字段命名严格对照 Go 版本，不做改进
+
+## 开发规范（2026-11-09 确定）
+
+### 面向对象
+
+- **不允许模块级业务函数**。业务逻辑一律放在 `Service` 类的方法里。
+- 三层结构，每层都是类：
+  - `api/v1/*.py` → `XxxController` 类（或用 FastAPI 的 `APIRouter` + 类实例方法）
+  - `services/*.py` → `XxxService` 类
+  - `repositories/*.py` → `XxxRepository` 类
+- 依赖通过构造函数注入（`__init__` 接收），不在方法内部 new 依赖。
+- 跨模块协作用 `Protocol` 定义契约（见 00-foundation 的 `protocols.py`），不用继承 ABC，
+  避免为了抽象而抽象。
+
+```python
+# 正确
+class ArticleService:
+    def __init__(
+        self,
+        repo: ArticleRepository,
+        user_repo: UserRepository,
+        storage: MinioStorage,
+    ) -> None:
+        self._repo = repo
+        ...
+
+# 错误：模块级函数 + 全局变量
+def create_article(...):
+    ...
+```
+
+### 注释
+
+- **每个类必须有 docstring**，说清职责 + 使用场景。
+- **每个公开方法必须有 docstring**，至少包含：做什么、参数、返回、抛什么异常。
+- 复杂逻辑（非显而易见的分支、魔法数字、兼容性处理）必须有行内注释说明**为什么**，
+  不是说明"做了什么"。
+- 注释用中文，`Args` / `Returns` / `Raises` 段用英文关键字（Google 风格），保持 IDE 提示正常。
+
+```python
+async def login(self, req: LoginRequest) -> LoginResponse:
+    """账号密码登录。
+
+    校验图形验证码 → 校验账号状态 → 校验密码 → 签发双 Token。
+    单设备登录：新登录会覆盖 Redis 中的 refresh token，旧设备下次刷新即失效。
+
+    Args:
+        req: 登录请求，含账号、密码、图形验证码 key 与用户输入的验证码。
+
+    Returns:
+        LoginResponse: 含 access token 与用户基础信息。
+
+    Raises:
+        BizError: 验证码错误(400) / 账号不存在(404) / 账号禁用(1004) / 密码错误(400)。
+    """
+```
+
+### 提交规范
+
+沿用 Go 项目的风格：`type(scope): 中文描述`
+
+| type | 用途 |
+|---|---|
+| `feat` | 新功能 |
+| `fix` | 修 bug |
+| `docs` | 只改文档 |
+| `refactor` | 重构，不改行为 |
+| `test` | 只改测试 |
+| `chore` | 构建、依赖、配置 |
+
+示例：`docs(article): 补充文章列表筛选接口说明`
+
+## 数据约定
+
+- **新项目数据全部新建**，不使用 Go 版本的任何数据。
+- 旧 PostgreSQL 库、旧 MinIO 桶**只读隔离**，新项目不建立任何连接。
+- 数据库：MySQL 8.0，库名 `blog-project`，字符集 `utf8mb4`。
+- MinIO：新桶名 `blog-v2`，与旧桶 `blog-project` 隔离。
+
+## 接口契约约定
+
+所有接口保持与 Go 版本一致，前端零改动（除后台删 2 个 tab）。
+
+- 响应包裹：`{"code": 0, "message": "成功", "data": {...}}`
+- `data` 为 `None` 时**不输出该字段**
+- 时间格式：`2026-11-09T21:39:04Z`（本地时间 + 字面 Z，照抄 Go 的 bug）
+- 分页字段：文章列表用 `page_size`，用户列表用 `pageSize`（历史原因，不要统一）
