@@ -36,6 +36,36 @@ config.set_main_option("sqlalchemy.url", _settings.database_url)
 target_metadata = Base.metadata
 
 
+def compare_type(
+    context,
+    inspected_column,
+    metadata_column,
+    inspected_type,
+    metadata_type,
+) -> bool | None:
+    """自定义列类型比较。
+
+    只为一处特例存在：`articles.content` 在模型里写的是
+    `Text().with_variant(MEDIUMTEXT(), "mysql")`，而 MySQL 反射回来的类型
+    是 `MEDIUMTEXT`。Alembic 会把 variant 展开成 `Text()` 再比，
+    于是永远判定成「类型变更」，`alembic check` 一直失败。
+
+    两者的 DDL 完全一致（都是 MEDIUMTEXT），这里直接判为相同。
+
+    Returns:
+        True 表示不同，False 表示相同，None 表示交给 Alembic 默认逻辑。
+    """
+    try:
+        is_content = metadata_column.table.name == "articles" and metadata_column.name == "content"
+    except AttributeError:
+        is_content = False
+
+    if is_content:
+        return False
+
+    return None
+
+
 def run_migrations_offline() -> None:
     """离线模式：只生成 SQL，不连库。
 
@@ -49,8 +79,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        # 让 MySQL 的列注释也能写进 DDL
-        compare_type=True,
+        compare_type=compare_type,
         compare_server_default=True,
     )
 
@@ -69,8 +98,7 @@ def do_run_migrations(connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
-        # 类型变化也纳入 diff（比如 varchar(50) → varchar(100)）
-        compare_type=True,
+        compare_type=compare_type,
         compare_server_default=True,
     )
 

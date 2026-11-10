@@ -327,6 +327,53 @@ def test_init_kwargs_beat_env(monkeypatch):
     assert settings.app.mode == "debug"
 
 
+def test_validation_error_returns_400():
+    """参数校验失败返回 400 + 中文文案，而不是 FastAPI 默认的 422 + 英文数组。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.middleware.exception import register_exception_handlers
+
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/need-int")
+    async def need_int(page: int) -> dict:
+        return {"page": page}
+
+    client = TestClient(app)
+    resp = client.get("/need-int", params={"page": "abc"})
+
+    assert resp.status_code == 400
+    assert resp.json() == {"code": 400, "message": "请求参数错误"}
+
+
+def test_unexpected_error_hides_stacktrace():
+    """未预期异常返回 500，且响应体里不能出现异常细节。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.middleware.exception import register_exception_handlers
+
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/boom")
+    async def boom() -> dict:
+        raise RuntimeError("secret-internal-detail: connection to db failed")
+
+    # raise_server_exceptions=False 才能拿到框架生成的 500 响应而不是直接抛异常
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.get("/boom")
+
+    assert resp.status_code == 500
+    assert resp.json() == {"code": 500, "message": "服务器内部错误"}
+    # 关键：内部细节一个字都不能漏
+    assert "secret-internal-detail" not in resp.text
+    assert "RuntimeError" not in resp.text
+    assert "Traceback" not in resp.text
+
+
 # ============================================================
 # 时间格式
 # ============================================================

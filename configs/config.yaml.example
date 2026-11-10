@@ -25,7 +25,7 @@ database:
     port: 3306
     user: "root"
     password: "改成你的密码"
-    database: "blog-project"
+    database: "blog_v2"
     # 连接池：注意 pool_size + max_overflow 的乘积再乘 worker 数，
     # 不能超过 MySQL 的 max_connections（默认 151）
     pool_size: 10

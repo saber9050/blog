@@ -4,7 +4,7 @@
 向量化功能整体删除后，这些列没有任何消费者，新库不建。
 """
 
-from sqlalchemy import BigInteger, Index, SmallInteger, String, Text
+from sqlalchemy import BigInteger, Index, SmallInteger, String
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,8 +18,9 @@ class Article(Base, TimestampMixin, SoftDeleteMixin):
     MySQL 的 `TEXT` 上限约 2 万汉字，技术长文很容易超，
     而且**超了不报错、直接截断**，是最难排查的一类数据丢失。
 
-    `with_variant` 的作用：以后若再换回 PostgreSQL，
-    自动退化成普通 `TEXT`，不用改模型代码。
+    这里直接用 `mysql.MEDIUMTEXT`，没有用 `Text().with_variant(...)`：
+    项目只跑 MySQL，variant 带来的是「Alembic 识别不了实际类型、
+    迁移里退化成 TEXT」这种坑，不值当。
     """
 
     __tablename__ = "articles"
@@ -27,7 +28,7 @@ class Article(Base, TimestampMixin, SoftDeleteMixin):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="作者 ID")
     title: Mapped[str] = mapped_column(String(100), nullable=False, comment="标题")
     content: Mapped[str] = mapped_column(
-        Text().with_variant(MEDIUMTEXT(), "mysql"),
+        MEDIUMTEXT(),
         nullable=False,
         comment="Markdown 正文",
     )

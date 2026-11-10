@@ -167,7 +167,9 @@ async def login(self, req: LoginRequest) -> LoginResponse:
 
 - **新项目数据全部新建**，不使用 Go 版本的任何数据。
 - 旧 PostgreSQL 库、旧 MinIO 桶**只读隔离**，新项目不建立任何连接。
-- 数据库：MySQL 8.0，库名 `blog-project`，字符集 `utf8mb4`。
+- 数据库：MySQL 8.0，库名 `blog_v2`，字符集 `utf8mb4`（collation `utf8mb4_0900_ai_ci`）。
+  > 本机 `blog-project` 库里还留着旧数据（33 篇文章 / 107 条评论 / 12 个用户），
+  > 按「旧数据不碰」的约定原样隔离，新库另起名 `blog_v2`。
 - MinIO：新桶名 `blog-v2`，与旧桶 `blog-project` 隔离。
 
 ## 接口契约约定

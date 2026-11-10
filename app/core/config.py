@@ -55,7 +55,7 @@ class MySQLSection(BaseModel):
     port: int = 3306
     user: str = "root"
     password: SecretStr = SecretStr("")
-    database: str = "blog-project"
+    database: str = "blog_v2"
     pool_size: int = 10
     max_overflow: int = 20
     # 打印每条 SQL，排查 N+1 时打开

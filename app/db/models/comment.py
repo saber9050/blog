@@ -4,7 +4,7 @@
 不支持多级嵌套 —— 三级以上的树形评论没有前端渲染方案，加了也没人用。
 """
 
-from sqlalchemy import BigInteger, Index, String, Text
+from sqlalchemy import BigInteger, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, SoftDeleteMixin, TimestampMixin
@@ -33,8 +33,14 @@ class Comment(Base, TimestampMixin, SoftDeleteMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="评论内容")
     # 回复目标昵称是**快照**：被回复的人后来改名，这里不改。
     # 理由：评论展示的是「我当时回复的是谁」，跟着改名会让历史对话错乱。
+    #
+    # server_default 必须写成 sa.text("''") 而不是 ""：
+    # 后者会在 DDL 里渲染成 `DEFAULT `（空值），MySQL 直接报 1064 语法错误。
     reply_to_name: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, server_default="", comment="回复目标昵称快照"
+        String(100),
+        nullable=True,
+        server_default=text("''"),
+        comment="回复目标昵称快照",
     )
 
     __table_args__ = (

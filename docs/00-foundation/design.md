@@ -67,7 +67,7 @@ class MySQLSection(BaseModel):
     port: int = 3306
     user: str = "root"
     password: SecretStr = SecretStr("")
-    database: str = "blog-project"
+    database: str = "blog_v2"
     pool_size: int = 10
     max_overflow: int = 20
     echo: bool = False
@@ -128,7 +128,7 @@ database:
     port: 3306
     user: "root"
     password: ""
-    database: "blog-project"
+    database: "blog_v2"
     pool_size: 10
     max_overflow: 20
     echo: false
