@@ -113,7 +113,7 @@ blog/
 ├── app/
 │   ├── main.py                  # create_app() + lifespan
 │   ├── core/
-│   │   ├── config.py            # pydantic-settings，读 .env
+│   │   ├── config.py            # pydantic-settings，读 configs/config.yaml
 │   │   ├── logging.py           # loguru 配置
 │   │   ├── errors.py            # 错误码表 + BizError
 │   │   ├── response.py          # ApiResponse / PageMeta / ok() / fail()
@@ -147,7 +147,7 @@ blog/
 │   └── integration/             # 接真 PG
 ├── docs/rewrite-plan.md         # 本文件
 ├── pyproject.toml
-├── .env.example
+├── configs/config.yaml.example
 ├── Dockerfile
 └── docker-compose.yml
 ```
@@ -638,7 +638,7 @@ PROMPT = """请为以下文章生成一段简洁的摘要，要求：
 | 10 | CORS | Go 侧是 `allow_origins=["*"]`；FastAPI 的 `CORSMiddleware` 在 `allow_credentials=True` 时不允许 `*`。用 `allow_origins=["*"], allow_credentials=False` |
 | 11 | 请求超时 | Go 设置读写 300s；uvicorn 默认无超时，但反向代理（Nginx）默认 60s，摘要接口要单独调 `proxy_read_timeout` |
 | 12 | lifespan 初始化 | 默认管理员创建、配置校验放在 `lifespan`，**失败要能启动**（对应 Go 里「向量初始化失败不阻断启动」的思路） |
-| 13 | 配置来源 | 只保留 `.env` + `pydantic-settings`，不再维护 `config.yaml`。Go 项目 README 里专门警告过「.env 与 config.yaml 密码必须一致」，这次直接消灭双重来源 |
+| 13 | 配置来源 | 只保留 `configs/config.yaml` + `pydantic-settings`，**不再保留 `.env`**。Go 项目同时维护两份配置，README 里专门警告过「两边密码必须一致」，这次直接消灭双重来源 |
 | 14 | 时区 | MySQL 的 `DATETIME` 不带时区，必须靠连接参数：`init_command="SET time_zone='+08:00'"` + compose 里 `--default-time-zone=+08:00`。漏一处，时间就差 8 小时 |
 | 15 | 连接回收 | `pool_recycle=3600` 必写。MySQL 默认 `wait_timeout=8h`，池里死连接会导致偶发「MySQL server has gone away」，PG 没这个问题 |
 | 16 | 正文列类型 | 文章 `content` 用 `MEDIUMTEXT`（16 MB），不要用 `TEXT`（64 KB）。中文长文超限**静默截断**，不报错 |
@@ -647,59 +647,95 @@ PROMPT = """请为以下文章生成一段简洁的摘要，要求：
 
 ## 9. 配置与部署
 
-### 9.1 `.env.example` 要点
+### 9.1 配置文件 `configs/config.yaml`
 
-```dotenv
-# 应用
-APP_NAME=blog-project
-APP_MODE=release
-APP_HOST=127.0.0.1
-APP_PORT=8000
+**单一配置源，YAML 分组结构**，与 Go 版 `config.yaml` 一致：
 
-# MySQL 8
-MYSQL_HOST=127.0.0.1
-MYSQL_PORT=3306
-MYSQL_USER=root
-MYSQL_PASSWORD=change-me
-MYSQL_DATABASE=blog-project
-MYSQL_POOL_SIZE=10
-MYSQL_MAX_OVERFLOW=20
+```yaml
+app:
+  name: "blog-project"
+  mode: "debug"            # debug 开放 /docs；release 关闭
+  host: "127.0.0.1"
+  port: 8000
 
-# Redis（可空，空则不启用缓存功能）
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-REDIS_PASSWORD=
+database:
+  mysql:
+    host: "127.0.0.1"
+    port: 3306
+    user: "root"
+    password: ""           # 容器部署时留空，用环境变量注入
+    database: "blog-project"
+    pool_size: 10
+    max_overflow: 20
+    echo: false
+  redis:
+    enabled: false         # false 时降级为进程内缓存（仅单 worker）
+    host: "127.0.0.1"
+    port: 6379
+    password: ""
+    db: 0
 
-# JWT
-JWT_SECRET=change-me
-JWT_ACCESS_EXPIRE_MINUTES=15
-JWT_REFRESH_EXPIRE_HOURS=72
+jwt:
+  secret: ""
+  access_expire_minutes: 15
+  refresh_expire_hours: 72
 
-# 模型 api_key 的对称加密密钥（Fernet，32 字节 base64）
-# 生成：python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# 换了这个值，库里所有模型配置的密钥都解不开，需要重新填写
-FERNET_KEY=change-me
+security:
+  fernet_key: ""           # 模型 api_key 的加密密钥
+  # 生成：python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-# MinIO
-MINIO_ENDPOINT=127.0.0.1:9000
-MINIO_ACCESS_KEY=admin
-MINIO_SECRET_KEY=change-me
-MINIO_BUCKET=blog-project
-MINIO_BASE_URL=http://127.0.0.1:9000
+minio:
+  endpoint: "127.0.0.1:9000"
+  access_key: "admin"
+  secret_key: ""
+  bucket: "blog-v2"
+  use_ssl: false
+  public_url: "http://127.0.0.1:9000"   # 必须是纯源，不要带路径前缀
 
-# SMTP
-SMTP_HOST=smtp.qq.com
-SMTP_PORT=587
-SMTP_USERNAME=
-SMTP_PASSWORD=
+smtp:
+  host: "smtp.qq.com"
+  port: 587
+  username: ""
+  password: ""
 
-# 默认管理员
-ADMIN_ENABLED=true
-ADMIN_ACCOUNT=00000000000
-ADMIN_PASSWORD=admin123456
+admin:
+  enabled: true
+  account: "00000000000"
+  password: "admin123456"
+
+log:
+  level: "INFO"
+  dir: "logs"
+  rotation: "50 MB"
+  retention: "7 days"
+
+business:
+  image_max_bytes: 10485760
+  allowed_image_exts: [".jpg", ".jpeg", ".png", ".webp"]
+  captcha_length: 6
+  captcha_expire_seconds: 300
+  captcha_send_limit_seconds: 60
+  max_page_size: 100
 ```
 
+**优先级**：环境变量 > YAML > 代码默认值。
+
+容器部署时敏感项用双下划线环境变量注入，避免写进镜像层：
+
+```yaml
+environment:
+  DATABASE__MYSQL__PASSWORD: "${MYSQL_PASSWORD}"
+  JWT__SECRET: "${JWT_SECRET}"
+  SECURITY__FERNET_KEY: "${FERNET_KEY}"
+```
+
+`configs/config.yaml` 不入库，只提交 `configs/config.yaml.example`。
+
+> **不再保留 `.env`**。Go 版同时维护 `config.yaml` 和 `.env`，README 里专门写过
+> 「两边密码必须一致」——那不是配置系统，是两个人肉维护的副本。重写只留一份。
+
 > 大模型仍然**不进配置文件**，登录后台维护，与现状一致。
+
 
 ### 9.2 Dockerfile
 

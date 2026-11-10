@@ -344,7 +344,7 @@ POST /admin/articles/generate-summary {config_id, title, content}
 | 方案 | 说明 | 结论 |
 |---|---|---|
 | A. 明文存 | 与 Go 版一致，DB 泄露即密钥泄露 | 否决 |
-| **B. 应用层 AES 加密** | 密钥放 `.env`（`SECRET_KEY`），库里存密文 | **本轮采用，+0.5 天** |
+| **B. 应用层 AES 加密** | 密钥放 `config.yaml` 的 `security.fernet_key`，库里存密文 | **本轮采用，+0.5 天** |
 | C. 走 KMS | 最安全但引入外部依赖 | 不做 |
 
 实现要点：

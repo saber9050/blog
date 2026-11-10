@@ -5,7 +5,7 @@
 **做什么**
 
 - 应用装配：`create_app()` 工厂、`lifespan` 启动/关闭钩子
-- 配置加载：`.env` → 强类型 `Settings` 对象
+- 配置加载：`configs/config.yaml` → 强类型 `Settings` 对象
 - 数据库：async engine、session 工厂、声明式基类、时间戳与软删除 Mixin
 - 连接池：Redis、MinIO 客户端的生命周期管理
 - 日志：loguru 配置（控制台 + 文件轮转）
@@ -23,21 +23,26 @@
 ## 2. 目录结构
 
 ```
+configs/
+├── config.yaml                 # 真实配置（不入库）
+└── config.yaml.example         # 模板（入库）
+
 app/
 ├── main.py                     # 唯一入口：create_app() + uvicorn 目标
 ├── core/
-│   ├── config.py               # Settings
+│   ├── config.py               # Settings + 各配置分组
 │   ├── logging.py              # LoggingConfigurator
 │   ├── errors.py               # ErrorCode + BizError
 │   ├── response.py             # ApiResponse + ResponseBuilder
 │   ├── security.py             # PasswordHasher + JWTManager + CryptoBox
 │   ├── protocols.py            # 跨模块契约（Protocol）
+│   ├── timefmt.py              # 三种时间格式
 │   └── deps.py                 # FastAPI 依赖：db / redis / storage / current_user
 ├── db/
 │   ├── database.py             # Database 类：engine + sessionmaker
 │   └── base.py                 # Base / TimestampMixin / SoftDeleteMixin
 ├── integrations/
-│   ├── redis_client.py         # RedisClient 封装
+│   ├── redis_client.py         # RedisClient + InMemoryCache
 │   └── minio_storage.py        # MinioStorage 封装
 ├── middleware/
 │   ├── request_log.py
@@ -53,67 +58,124 @@ app/
 
 ### 3.1 配置：`Settings`
 
+配置文件是 `configs/config.yaml`，**YAML 分组结构，与 Go 版的 `config.yaml` 对齐**。
+不再保留 `.env` —— 双份配置就是双份真相，Go 项目已经踩过「两边密码不一致」的坑。
+
 ```python
+class MySQLSection(BaseModel):
+    host: str = "127.0.0.1"
+    port: int = 3306
+    user: str = "root"
+    password: SecretStr = SecretStr("")
+    database: str = "blog-project"
+    pool_size: int = 10
+    max_overflow: int = 20
+    echo: bool = False
+
+class JWTSection(BaseModel):
+    secret: SecretStr = SecretStr("change-me")
+    access_expire_minutes: int = 15
+    refresh_expire_hours: int = 72
+
+# ... MinioSection / SmtpSection / AdminSection / LogSection / BusinessSection
+
 class Settings(BaseSettings):
-    """全局配置，启动时从 .env 加载一次。
+    """配置根对象。字段名与 config.yaml 的顶层键一一对应。"""
 
-    用 pydantic-settings 而不是自写 YAML 解析：类型错误在启动时直接崩，
-    不会等到第一次查库才发现 host 写成了 localhost:。
-    """
+    model_config = SettingsConfigDict(
+        yaml_file=str(CONFIG_FILE),          # configs/config.yaml
+        env_nested_delimiter="__",           # DATABASE__MYSQL__PASSWORD
+        extra="ignore",
+    )
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    app: AppSection = Field(default_factory=AppSection)
+    database: DatabaseSection = Field(default_factory=DatabaseSection)
+    jwt: JWTSection = Field(default_factory=JWTSection)
+    security: SecuritySection = Field(default_factory=SecuritySection)
+    minio: MinioSection = Field(default_factory=MinioSection)
+    smtp: SmtpSection = Field(default_factory=SmtpSection)
+    admin: AdminSection = Field(default_factory=AdminSection)
+    log: LogSection = Field(default_factory=LogSection)
+    business: BusinessSection = Field(default_factory=BusinessSection)
 
-    app_name: str = "blog-project"
-    app_mode: Literal["debug", "release"] = "release"
-    app_port: int = 8000
+    @classmethod
+    def settings_customise_sources(cls, ...):
+        """优先级：显式传参 > 环境变量 > YAML > 默认值。
 
-    mysql_host: str
-    mysql_port: int = 3306
-    mysql_user: str
-    mysql_password: str
-    mysql_database: str = "blog-project"
-    mysql_pool_size: int = 10
-    mysql_max_overflow: int = 20
+        ⚠️ 这个方法必须显式写：pydantic-settings 默认**不认 YAML**，
+        只声明 `yaml_file` 会静默使用默认值，不报错。
+        典型症状是「改了 config.yaml 但程序没反应」。
+        """
 
-    redis_host: str = "127.0.0.1"
-    redis_port: int = 6379
-    redis_password: str | None = None
-    redis_db: int = 0
-    redis_enabled: bool = True          # 关掉时验证码降级为内存字典，便于本地无 Redis 调试
-
-    jwt_secret: str
-    jwt_access_expire_minutes: int = 15
-    jwt_refresh_expire_hours: int = 72
-
-    # 模型 api_key 的对称加密密钥（Fernet key，32 字节 base64）。
-    # 与 jwt_secret 分开：换 JWT 密钥不该导致所有模型配置作废。
-    fernet_key: str
-
-    minio_endpoint: str = "127.0.0.1:9000"
-    minio_access_key: str = ""
-    minio_secret_key: str = ""
-    minio_bucket: str = "blog-v2"
-    minio_use_ssl: bool = False
-    minio_public_url: str = "http://127.0.0.1:9000"
-
-    smtp_host: str = "smtp.qq.com"
-    smtp_port: int = 587
-    smtp_username: str = ""
-    smtp_password: str = ""
-
-    admin_enabled: bool = True
-    admin_account: str = "00000000000"
-    admin_password: str = "admin123456"
-
+    @computed_field
     @property
     def database_url(self) -> str:
-        """拼 asyncmy 连接串。密码里的特殊字符必须转义，否则 @ 和 / 会截断 URL。"""
+        """拼 asyncmy 连接串。密码做 URL 编码，否则 @ 和 / 会截断 URL。"""
+```
+
+YAML 结构（`configs/config.yaml`）：
+
+```yaml
+app:
+  name: "blog-project"
+  mode: "debug"          # debug / release
+  host: "127.0.0.1"
+  port: 8000
+
+database:
+  mysql:
+    host: "127.0.0.1"
+    port: 3306
+    user: "root"
+    password: ""
+    database: "blog-project"
+    pool_size: 10
+    max_overflow: 20
+    echo: false
+  redis:
+    enabled: false       # false 时降级为进程内缓存
+    host: "127.0.0.1"
+    port: 6379
+    password: ""
+    db: 0
+
+jwt:
+  secret: ""
+  access_expire_minutes: 15
+  refresh_expire_hours: 72
+
+security:
+  fernet_key: ""         # 留空则模型 api_key 明文存储（仅本地调试）
+
+minio: { endpoint: "127.0.0.1:9000", bucket: "blog-v2", public_url: "http://127.0.0.1:9000" }
+smtp:  { host: "smtp.qq.com", port: 587, username: "", password: "" }
+admin: { enabled: true, account: "00000000000", password: "admin123456" }
+log:   { level: "INFO", dir: "logs", rotation: "50 MB", retention: "7 days" }
+
+business:
+  image_max_bytes: 10485760
+  allowed_image_exts: [".jpg", ".jpeg", ".png", ".webp"]
+  captcha_length: 6
+  captcha_expire_seconds: 300
+  captcha_send_limit_seconds: 60
+  max_page_size: 100
 ```
 
 | 类 | 职责 | 说明 |
 |---|---|---|
-| `Settings` | 承载全部配置 | 单例，通过 `get_settings()` 带 `lru_cache` 获取 |
+| `Settings` | 配置根对象 | 单例，`get_settings()` 带 `lru_cache` |
+| `*Section` | 各配置分组 | 每个分组一个 `BaseModel`，职责单一 |
 | `Database` | 持有 engine 与 sessionmaker | 见 3.2 |
+
+**覆盖规则**：容器部署时敏感项用环境变量注入，避免写进镜像层：
+
+```bash
+DATABASE__MYSQL__PASSWORD=xxx
+JWT__SECRET=xxx
+SECURITY__FERNET_KEY=xxx
+```
+
+`configs/config.yaml` 不入库（`.gitignore` 已排除），只提交 `config.yaml.example`。
 
 ### 3.2 数据库：`Database`
 
@@ -289,7 +351,7 @@ class CryptoBox:
     用 cryptography 的 Fernet（AES-128-CBC + HMAC），不手搓 AES：
     Fernet 自带完整性校验，密文被改过会直接抛 InvalidToken 而不是解密出垃圾。
 
-    密钥从 .env 的 FERNET_KEY 读，**不要复用 JWT_SECRET**：
+    密钥从 config.yaml 的 `security.fernet_key` 读，**不要复用 jwt.secret**：
     换 JWT 密钥不该导致所有模型配置作废。
     """
 
@@ -401,7 +463,7 @@ deps.py
 ```
 uvicorn app.main:app
   → create_app()
-      → Settings()               # .env 缺失必填项直接抛异常，不启动
+      → Settings()               # config.yaml 缺失/格式错误直接抛异常，不启动
       → LoggingConfigurator.setup()
       → Database(settings)
       → RedisClient(settings)    # 连不上只 warn，不停机
@@ -472,7 +534,7 @@ uvicorn app.main:app
 
 | 用例 | 断言 |
 |---|---|
-| `.env` 缺 `JWT_SECRET` | `Settings()` 抛 ValidationError，应用不启动 |
+| `config.yaml` 的 `jwt.secret` 缺失 | `Settings()` 抛 ValidationError，应用不启动 |
 | 响应序列化 | `data=None` 时 JSON 里没有 `data` 键 |
 | 业务码映射 | `BizError(ErrorCode.USER_NOT_FOUND)` → HTTP 400 + `code=1001` |
 | 未捕获异常 | 返回 500，**响应体里不含堆栈** |

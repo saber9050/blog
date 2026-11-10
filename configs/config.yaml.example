@@ -1,0 +1,94 @@
+# ============================================================
+# 博客后端配置
+#
+# 复制为 configs/config.yaml 后填写真实值。config.yaml 不入库。
+#
+# 覆盖规则（优先级从高到低）：
+#   1. 环境变量（双下划线表示层级，如 DATABASE__MYSQL__PASSWORD）
+#   2. 本文件
+#   3. 代码里的默认值
+#
+# 容器部署时，密码类字段建议留空，由 docker compose 的环境变量注入，
+# 避免把密钥写进镜像层。
+# ============================================================
+
+app:
+  name: "blog-project"
+  # debug 会开放 /docs、打印详细堆栈；生产用 release
+  mode: "debug"
+  host: "127.0.0.1"
+  port: 8000
+
+database:
+  mysql:
+    host: "127.0.0.1"
+    port: 3306
+    user: "root"
+    password: "改成你的密码"
+    database: "blog-project"
+    # 连接池：注意 pool_size + max_overflow 的乘积再乘 worker 数，
+    # 不能超过 MySQL 的 max_connections（默认 151）
+    pool_size: 10
+    max_overflow: 20
+    # 打开会打印每条 SQL，排查 N+1 时用，平时关掉
+    echo: false
+
+  redis:
+    # 本地没起 Redis 时设为 false，会降级为进程内缓存（仅限单 worker 调试）
+    enabled: false
+    host: "127.0.0.1"
+    port: 6379
+    password: ""
+    db: 0
+
+jwt:
+  # 生产环境必须换成随机长字符串
+  secret: "change-me-to-a-long-random-string"
+  access_expire_minutes: 15
+  refresh_expire_hours: 72
+
+security:
+  # 模型 api_key 的对称加密密钥。生成方式：
+  #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  # 留空则以明文存库（仅限本地调试）。换过这个值后，已存的模型密钥全部解不开。
+  fernet_key: ""
+
+minio:
+  endpoint: "127.0.0.1:9000"
+  access_key: "admin"
+  secret_key: "change-me"
+  bucket: "blog-v2"
+  use_ssl: false
+  # 浏览器访问地址，必须是纯源，不要带路径前缀（否则封面 403）
+  public_url: "http://127.0.0.1:9000"
+
+smtp:
+  host: "smtp.qq.com"
+  port: 587
+  username: ""
+  # QQ 邮箱的 SMTP 授权码，不是登录密码
+  password: ""
+
+admin:
+  # 首次启动且库里没有管理员时自动创建
+  enabled: true
+  account: "00000000000"
+  password: "admin123456"
+
+log:
+  level: "INFO"
+  dir: "logs"
+  # loguru 的轮转/保留参数
+  rotation: "50 MB"
+  retention: "7 days"
+
+business:
+  # 图片上传（单位：字节，10 MB）
+  image_max_bytes: 10485760
+  allowed_image_exts: [".jpg", ".jpeg", ".png", ".webp"]
+  # 验证码
+  captcha_length: 6
+  captcha_expire_seconds: 300
+  captcha_send_limit_seconds: 60
+  # 分页单页上限
+  max_page_size: 100
