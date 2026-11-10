@@ -125,9 +125,17 @@ class ArticleService:
     async def like(self, article_id: int, user_id: int) -> None:
         """点赞。
 
-        ⚠️ likes 表没有唯一索引，靠「先查后插」。并发双击会插两条重复记录。
-        这是 Go 版的现状，本轮**保持不改**（加唯一索引需要改表结构，
-        且前端已用 is_liked 布尔判断，重复记录不会导致 UI 错乱，只会让计数虚高）。
+        Go 版 `likes` 表没有唯一索引，靠「先查后插」，并发双击会插两条重复记录，
+        点赞数虚高。新库**直接加 `UNIQUE(article_id, user_id)`**，逻辑改成：
+
+          1. 校验用户与文章
+          2. INSERT likes
+          3. 捕获 IntegrityError → 抛 400「您已经点赞过该文章」
+
+        这样并发下也不会产生重复行，而且少一次查询。
+
+        **不能改成「先查再插 + 唯一索引」**：查与插之间仍有窗口，
+        并发时必然有一方撞索引，还是得靠异常兜底。
         """
 
     async def unlike(self, article_id: int, user_id: int) -> None: ...
@@ -281,8 +289,15 @@ class ArticleImageRepository:
 | `article_id` | `BIGINT` NOT NULL, INDEX | |
 | `user_id` | `BIGINT` NOT NULL, INDEX | |
 
-> **没有唯一索引**（照抄 Go 版）。`(article_id, user_id)` 加唯一键是技术债，
-> 见第 8 节开放问题。
+**索引**
+
+| 名称 | 列 | 类型 |
+|---|---|---|
+| PRIMARY | `id` | 主键 |
+| uk_article_user | `article_id`, `user_id` | **唯一** |
+
+> 唯一索引是本轮新增的（Go 版没有），用于杜绝并发重复点赞。
+> 加了之后插入逻辑要改成捕获 `IntegrityError`，见 3.2 的 `like()`。
 
 ---
 
@@ -313,7 +328,39 @@ GET /articles?page=1&page_size=10&sort=popular&category_id=3&tag_ids=1,2&keyword
 内存拼装 → ArticleItem[]
 ```
 
-固定 8 条查询，与页大小无关。Go 版是 1 + 10×6 = 61 条。
+固定 8 条查询（游客 7 条，跳过第 ⑧ 步），与页大小无关。
+Go 版是 1 + 10×6 = 61 条。
+
+### 5.0 路由注册顺序（FastAPI 特有的坑）
+
+**静态路径必须注册在 `{id}` 之前**，否则会被当成 id 参数吃掉。
+
+Go 的 gin 用路由树，静态路径优先级自动高于参数路径，写反了也没事。
+FastAPI / Starlette 按**注册顺序**线性匹配，`{article_id}` 能匹配任意字符串：
+
+```python
+# ❌ 错误顺序：GET /articles/random 会命中 /articles/{article_id}
+#    然后 int("random") 转换失败 → 直接返回 422，不会继续往下匹配
+@router.get("/articles/{article_id}")
+@router.get("/articles/random")
+
+# ✅ 正确顺序
+@router.get("/articles/random")
+@router.get("/articles/stats")
+@router.get("/articles/{article_id}")
+```
+
+本模块受影响的 4 条：
+
+| 静态路径 | 冲突的动态路径 | 必须在前 |
+|---|---|---|
+| `GET /articles/random` | `GET /articles/{id}` | ✅ |
+| `GET /articles/stats` | `GET /articles/{id}` | ✅ |
+| `PUT /admin/articles/transfer` | `PUT /admin/articles/{id}` | ✅ |
+| `POST /admin/articles/generate-summary` | 无（没有 `POST /{id}`） | 无冲突，但保持静态在前 |
+
+> 07-llm 的 `generate-summary` 如果和 03 的 router 分两个文件挂同一前缀，
+> 要确认 `include_router` 的顺序，不能只看各自文件内的顺序。
 
 ### 5.2 热度排序公式（照抄）
 
@@ -430,13 +477,15 @@ DELETE /admin/articles/:id
 
 ## 8. 开放问题
 
-1. **`likes` 缺唯一索引**：并发双击会产生重复记录，点赞数虚高。
-   建议加 `UNIQUE(article_id, user_id)`。要加的话在 P0 建表时就加，后面补要清数据。
-   **需要你拍板。**
-2. **随机文章用 `ORDER BY RAND()`**：文章上万后会很慢。当前 19 篇无所谓，建议先这样。
+1. **`likes` 唯一索引**：已决定在新库加 `UNIQUE(article_id, user_id)`，
+   插入逻辑改为捕获 `IntegrityError`（见 3.2）。这条不再是开放问题，记在这里避免后续忘记。
+2. **随机文章用 `ORDER BY RAND()`**：文章上万后会很慢。当前数据量小无所谓，先用着；
+   数据量过千后再改成「随机 offset」。
 3. **删文章不删评论记录，只软删**：评论表会累积。是否需要定期清理？建议不做。
 4. **`syncArticleImages` 的「空图不清空」行为**：正文里的图全删掉后，`article_images`
    仍保留旧记录，导致删文章时会去删已经不在正文里的图。
    Go 版这么写是有意的（防止误删刚上传还没插入正文的图），本轮照抄。
 5. **`ArticleItem` 的 `created_at` 是 `string`**，其他模块有的是 `time.Time`（评论）。
    这是 Go 版的不一致，本轮照抄，不统一。
+6. **草稿文章的访问控制**：游客能通过 ID 直接打开草稿（`FindByID` 不过滤 status）。
+   建议加上「非作者且非管理员返回 404」，改后端一处，前端路由不用动。

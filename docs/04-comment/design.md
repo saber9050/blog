@@ -94,12 +94,15 @@ class CommentService:
     async def delete(self, comment_id: int, current: CurrentUser) -> None:
         """删除评论。作者本人或管理员可删。
 
-        ⚠️ **不级联删子回复**（Go 版行为）：
-        删掉一级评论后，其下的二级回复仍留在库里，parent_id 指向一条已删记录。
-        列表接口查一级评论时不会返回它们，所以界面上看不到；
-        但它们会继续计入 total，也会在后台列表里出现。
+        **本轮改为级联软删**：删一级评论时，一并软删它下面的所有回复
+        （`parent_id = comment_id`）。
 
-        这个行为要不要改，见第 7 节开放问题。
+        Go 版只删一级，子回复留在库里，`parent_id` 指向一条已删记录 ——
+        界面上看不见它们（一级列表不返回），但它们会继续计入 total、
+        在后台列表里出现，越积越脏。
+
+        Raises:
+            BizError: 评论不存在(404) / 无权限(403)。
         """
 
     # ===== 后台 =====
@@ -118,13 +121,24 @@ class CommentService:
 class CommentRepository:
     """comments 表访问。
 
-    与其他仓储不同，这里的查询经常需要「包含已删除记录」：
+    与其他仓储不同，这里的查询需要「包含已删除记录」：
     已删除的评论仍要在列表里占位（前端显示「该评论已被删除」），
-    所以不能无脑加 not_deleted() 过滤，必须按场景决定。
+    所以不能无脑加 not_deleted() 过滤。
+
+    ⚠️ **total 与列表必须口径一致，都包含已删**。
+    Go 版这里有个 bug：计数用 `Model(&Comment{})`，GORM 会自动加
+    `deleted_at IS NULL`；而列表用 `Table("comments")`，GORM 不认识模型、
+    不加任何软删条件。结果就是「total=3，列表渲染出 5 条」，前端分页器错位。
+
+    修法不能是「让列表也不含已删」—— 那样 is_deleted 永远是 false，
+    前端「该评论已删除」的占位逻辑就废了。正确做法是两处都不加过滤。
     """
 
     async def paginate_top_level(self, article_id: int, page: int, page_size: int) -> tuple[list[Comment], int]:
-        """一级评论：parent_id 为空或 0。包含已删除的（占位显示）。"""
+        """一级评论：parent_id 为空或 0。
+
+        列表与 total **都包含已删除记录**，保持一致。
+        """
 
     async def paginate_replies(self, parent_id: int, page: int, page_size: int) -> tuple[list[Comment], int]: ...
 
@@ -135,7 +149,17 @@ class CommentRepository:
 
     async def insert(self, comment: Comment) -> int: ...
 
-    async def soft_delete(self, comment_id: int) -> None: ...
+    async def soft_delete(self, comment_id: int) -> None:
+        """软删单条。"""
+
+    async def soft_delete_with_replies(self, comment_id: int) -> int:
+        """软删一条一级评论及其所有回复。
+
+        一条 UPDATE 解决，不要先查子 ID 再逐条删：
+            UPDATE comments SET deleted_at = NOW()
+            WHERE id = ? OR parent_id = ?
+        返回影响行数，便于日志里看出连带删了几条。
+        """
 
     async def soft_delete_by_article(self, article_id: int) -> int:
         """软删某篇文章下所有评论。删文章时调用，返回影响行数。"""
@@ -251,22 +275,28 @@ LIMIT ? OFFSET ?
 
 ## 7. 开放问题
 
-### 7.1 需要拍板：删除一级评论要不要级联
+### 7.1 删除一级评论：本轮级联软删
 
-| 方案 | 行为 | 影响 |
+| 方案 | 行为 | 结论 |
 |---|---|---|
-| A. 保持现状（Go 版） | 只软删一级，子回复留库里但界面不可见 | 数据越积越多；后台能看到孤儿回复；`total` 统计会偏大 |
-| B. 级联软删 | 同时软删所有 `parent_id = 该评论` 的回复 | 更干净；但如果回复里有人认真写了长内容，会连带消失 |
-| C. 改为显示占位 | 一级删了，回复仍在，但显示「原评论已删除」 | 需要前端改动 |
+| A. 保持 Go 版 | 只软删一级，子回复留库里 | 否决：数据越积越多，后台列表变脏 |
+| **B. 级联软删** | 同时软删所有 `parent_id = 该评论` 的回复 | **本轮采用** |
+| C. 显示占位 | 一级删了，回复仍显示 | 否决：需要改前端 |
 
-**建议 B**，理由：二级回复脱离一级评论后没有上下文，留着也没用，反而让后台列表变脏。
-改动只在 `CommentService.delete`，前端不用动。
+B 只在 `CommentService.delete` 里多做一句 UPDATE，前端不用动。
+二级回复脱离一级评论后没有上下文，留着也没用。
 
 ### 7.2 其他
 
 1. **评论内容无长度上限**：`TEXT` 能存 64 KB。是否加 1000 字符限制？
    加的话前后端都要改提示文案，建议后续迭代。
 2. **`reply_to_name` 是快照**：被回复的人改昵称后，评论里显示的仍是旧名。保持现状。
-3. **评论数统计包含已删**：`article.comment_count` 在 SQL 里加了 `deleted_at IS NULL`，
-   而列表接口返回的是「含已删占位」的 total。两处口径不一致，前端可能显示「3 条评论」
-   但列表里 2 条。建议统一为不含已删，见 P2 验收项。
+3. **`article.comment_count` 与列表 total 口径不同**：文章列表里的 `comment_count`
+   统计的是未删评论（SQL 里带 `deleted_at IS NULL`），而评论列表的 `total` 包含已删占位。
+   所以文章卡片显示「3 条评论」，点进去页面写「共 5 条」。
+
+   **本轮统一为「含已删」**：把 `comment_count` 的 SQL 去掉 `deleted_at IS NULL`，
+   与列表 total 对齐。这样三处数字一致，前端的「该评论已删除」占位也仍然有效。
+
+   反方向的「都不含已删」不采用：那样 `is_deleted` 永远为 `false`，
+   前端的占位展示逻辑直接废掉。

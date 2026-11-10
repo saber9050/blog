@@ -22,7 +22,7 @@
 {
   "id": 1,
   "base_url": "https://api.deepseek.com/v1",
-  "api_key_masked": "sk-1****cdef",
+  "api_key_masked": "sk-****cdef",
   "model": "deepseek-chat",
   "type": 1,
   "timeout_sec": 30,
@@ -36,7 +36,7 @@
 
 | 字段 | 说明 |
 |---|---|
-| `api_key_masked` | 脱敏后的密钥。**明文永远不会返回** |
+| `api_key_masked` | 脱敏后的密钥。**明文永远不会返回**（库里存的是密文） |
 | `type` | 恒为 `1`（对话模型）。字段保留是因为前端列表可能有类型列 |
 | `dimension` | **不再返回**（新库无此列，向量功能已删） |
 
@@ -61,7 +61,7 @@
     {
       "id": 1,
       "base_url": "https://api.deepseek.com/v1",
-      "api_key_masked": "sk-1****cdef",
+      "api_key_masked": "sk-****cdef",
       "model": "deepseek-chat",
       "type": 1,
       "timeout_sec": 30,
@@ -194,7 +194,7 @@
 | 场景 | HTTP | code | message |
 |---|---|---|---|
 | 缺 base_url / api_key / model | 400 | 400 | 请求参数错误 |
-| **测试连接失败** | 400 | 400 | 连接测试未通过：LLM 返回异常状态码 401: Invalid API key |
+| **测试连接失败** | 400 | 400 | 配置不可用，测试连接失败：LLM 返回异常状态码 401: Invalid API key |
 
 **注意**
 
@@ -320,3 +320,7 @@
 - 同一篇内容重复调用会重复消耗 token，没有缓存。
 - 调用耗时通常 3-10 秒，**Nginx 的 `proxy_read_timeout` 要大于 60 秒**，
   否则会看到 504。
+- **路由注册顺序**：这条路径挂在 `/admin/articles` 前缀下，与 03 模块的
+  `PUT /admin/articles/{id}` 共用前缀。FastAPI 按注册顺序匹配，虽然
+  本接口是 POST 不与 PUT 冲突，但仍建议把所有静态路径排在 `{id}` 之前，
+  避免将来新增 `POST /admin/articles/{id}` 时踩坑。

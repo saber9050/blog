@@ -675,6 +675,11 @@ JWT_SECRET=change-me
 JWT_ACCESS_EXPIRE_MINUTES=15
 JWT_REFRESH_EXPIRE_HOURS=72
 
+# 模型 api_key 的对称加密密钥（Fernet，32 字节 base64）
+# 生成：python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# 换了这个值，库里所有模型配置的密钥都解不开，需要重新填写
+FERNET_KEY=change-me
+
 # MinIO
 MINIO_ENDPOINT=127.0.0.1:9000
 MINIO_ACCESS_KEY=admin

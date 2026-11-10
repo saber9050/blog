@@ -61,8 +61,17 @@ class UserController:
     async def request_email_change(self, req: UpdateEmailRequest, current: CurrentUser) -> JSONResponse: ...
     async def add_email(self, req: AddEmailRequest, current: CurrentUser) -> JSONResponse: ...
     async def is_exists_email(self, email: str) -> JSONResponse: ...
-    async def confirm_email(self, token: str) -> JSONResponse:
-        """邮件确认链接的落地接口。token 里含 user_id 与新邮箱，5 分钟有效。"""
+    async def confirm_email(self, token: str) -> HTMLResponse:
+        """邮件确认链接的落地接口。
+
+        **返回 HTML 页面而不是 JSON**：这个 URL 是给浏览器直接打开的
+        （用户点邮件里的按钮），页面自带内联样式，不依赖前端 SPA。
+        四种情况（成功 / 缺 token / token 无效 / token 已用）全部返回 HTTP 200，
+        成败只体现在页面内容上。
+
+        token 里含 user_id 与**新邮箱**。注意 Go 版把新邮箱塞在 claims 的
+        `username` 字段里（历史包袱），Python 侧按同样语义解析，不要被字段名误导。
+        """
 
 class AdminUserController:
     """后台用户管理。整组要求 role_id == 1。"""
@@ -101,13 +110,12 @@ class UserService:
     async def update_profile(self, user_id: int, req: UpdateProfileRequest) -> None:
         """更新昵称与简介。
 
-        ⚠️ Go 版这里有两个坑，本轮修不修要拍板（见第 8 节开放问题）：
+        本轮修掉 Go 版的两个问题（详见 8.1）：
 
-        1. **昵称没做唯一性预检**：直接 UPDATE，撞唯一索引时 MySQL 抛
-           IntegrityError，被全局兜底成 500「服务器内部错误」。
-           应该先查一次，冲突返回 409「该昵称已经存在」。
-        2. **空字符串表示「不修改」**：`if req.NickName != ""` 才写库，
-           结果用户永远无法把简介清空。应该用 `None` 表示不传、`""` 表示清空。
+        1. **昵称先查重**：排除自己之后再判重，冲突返回 409。
+           Go 版直接 UPDATE，撞唯一索引会被兜底成 500「服务器内部错误」。
+        2. **区分「不传」与「传空」**：`None` 表示不修改，`""` 表示清空。
+           Go 版用 `!= ""` 判断，导致简介永远清不掉。
         """
 
     async def update_avatar(self, user_id: int, file: UploadFile) -> UpdateAvatarResponse:
@@ -137,10 +145,22 @@ class UserService:
 
         token 用一次即作废：写入 Redis 黑名单（TTL 300 秒，与 token 同寿）。
         不写黑名单的话，链接在有效期内可以被重复点击，虽然结果一样但会重复写库。
+
+        Raises:
+            BizError: token 在黑名单里(403) / 签名无效或已过期(401)。
+            异常由 Controller 捕获后渲染成 HTML 失败页，不返回 JSON。
+
+        服务层只管「改没改成功」，页面长什么样是 Controller 的事 ——
+        这样将来要换样式，不用动业务逻辑。
         """
 
     async def add_email(self, user_id: int, req: AddEmailRequest) -> None:
-        """给从没绑过邮箱的账号补充邮箱。直接生效，不走确认链接。"""
+        """给从没绑过邮箱的账号补充邮箱。直接生效，不走确认链接。
+
+        Raises:
+            BizError: 账号已有邮箱(403「用户已存在邮箱，不可再添加」) /
+                      验证码错误(400) / 邮箱已被占用(409)。
+        """
 
     async def is_exists_email(self, email: str) -> IsExistsResponse: ...
 
@@ -270,14 +290,16 @@ PUT /admin/users/:id {status: 0}
 | 用户不存在 | 404 | 用户不存在 |
 | 昵称已被占用 | 409 | 该昵称已经存在 |
 | 邮箱已被绑定 | 409 | 该邮箱已经被绑定 |
-| 邮箱未绑定（换绑时） | 400 | 当前账号未绑定邮箱 |
+| 账号已有邮箱（补绑时） | 403 | 用户已存在邮箱，不可再添加 |
 | 密码错误 | 400 | 密码错误 |
 | 两次密码不一致 | 400 | 两次密码不一致 |
 | 图片超过 10 MB | 400 | 图片大小不能超过 10MB |
 | 不支持的图片格式 | 400 | 不支持的文件格式 |
-| 确认链接已失效 | 403 | 该token已无效 |
 | 发确认邮件过于频繁 | 429 | 请勿频繁发送验证码，请60秒后再试 |
 | 不能禁用自己 | 400 | 不能修改自己的状态 |
+
+> 换绑邮箱的确认链接不是 JSON 接口，失败时渲染 HTML 页面（HTTP 200），
+> 页面文案见 [api.md 第 8 节](./api.md#8-确认换绑邮箱邮件链接)。
 
 ---
 
@@ -300,14 +322,14 @@ PUT /admin/users/:id {status: 0}
 
 ## 8. 开放问题
 
-### 8.1 需要拍板：修不修 Go 版的两个 bug
+### 8.1 本轮修正的两个历史问题
 
-| # | 问题 | 现状 | 建议 | 改动面 |
-|---|---|---|---|---|
-| 1 | 昵称撞唯一索引 | 返回 500，前端只显示「服务器内部错误」 | 预检后返回 409 | 后端 1 处；前端如果已写死 500 提示则不动 |
-| 2 | 简介无法清空 | 传 `""` 被当成「不修改」 | 字段改成 `str \| None`，`""` 视为清空 | 后端 1 处；前端调接口方式不变 |
+| # | 问题 | Go 版现状 | 本轮做法 |
+|---|---|---|---|
+| 1 | 昵称撞唯一索引 | 直接 UPDATE，撞索引抛 DB 异常，被兜底成 500 | 先查重（排除自己）→ 冲突返回 409「该昵称已经存在」 |
+| 2 | 简介无法清空 | 字段传 `""` 被当成「不修改」 | 入参用 `str \| None`：`None` = 不改，`""` = 清空 |
 
-> 这两处**不影响响应结构**，只改内部行为，属于可以在重写时顺手修的范围。
+> 两处**不影响响应结构**，只改内部行为，前端调用方式不变。
 
 ### 8.2 其他
 

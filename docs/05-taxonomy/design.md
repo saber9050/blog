@@ -63,7 +63,7 @@ class TaxonomyService(ABC, Generic[T]):
     # ---------- 公共流程 ----------
 
     async def list_public(self) -> list[TaxonomyPublicDTO]:
-        """前台列表：只返回 status=1，按创建时间正序。"""
+        """前台列表：只返回 status=1，按 created_at **DESC**（新的在前）。"""
 
     async def count_enabled(self) -> int:
         """启用数量。首页「N 个分类」用。"""
@@ -74,9 +74,11 @@ class TaxonomyService(ABC, Generic[T]):
     async def create(self, name: str, status: int) -> int:
         """新建。
 
-        名称查重：`IsExistsByName(name, exclude_id=0)`。
-        MySQL 的 ci 排序规则下「后端」与「后端 」算重名（尾空格被忽略），
-        所以入库前统一 strip()。
+        名称查重：`exists_name(name, exclude_id=0)`。
+
+        **入参先 strip() 再查重与入库**。Go 版不 strip，导致 MySQL 的 ci 排序规则
+        下「后端」与「后端 」查重时算重名、存进去却是两个不同的字符串（一个带空格）。
+        入口处截一次，后续所有比较和存储都用干净值。
         """
 
     async def update(self, entity_id: int, name: str, status: int) -> None:
@@ -197,7 +199,7 @@ TaxonomyRepository (ABC, Generic[T])
 | 列 | 类型 | 约束 | 说明 |
 |---|---|---|---|
 | `id` | `BIGINT` | PK | |
-| `category_name` | `VARCHAR(50)` | NOT NULL | |
+| `category_name` | `VARCHAR(50)` | NOT NULL, **UNIQUE** | |
 | `status` | `SMALLINT` | NOT NULL | 1 启用 / 0 禁用 |
 | `created_at` / `updated_at` | `DATETIME` | NOT NULL | |
 
@@ -209,7 +211,7 @@ TaxonomyRepository (ABC, Generic[T])
 | 列 | 类型 | 约束 |
 |---|---|---|
 | `id` | `BIGINT` | PK |
-| `tag_name` | `VARCHAR(100)` | NOT NULL |
+| `tag_name` | `VARCHAR(100)` | NOT NULL, **UNIQUE** |
 | `status` | `SMALLINT` | NOT NULL |
 | `created_at` / `updated_at` | `DATETIME` | NOT NULL |
 
@@ -250,11 +252,11 @@ DELETE /admin/tags/5
 ### 6.3 名称查重
 
 ```
-POST /admin/categories {name: "后端"}
- → strip(name)
+POST /admin/categories {name: "后端 "}
+ → name = name.strip()              # 去掉首尾空格
  → SELECT 1 FROM categorys WHERE category_name = '后端' LIMIT 1
      └─ 命中 → 400「分类名称已存在」
- → INSERT
+ → INSERT categorys(category_name='后端')
 ```
 
 更新时排除自己：
@@ -285,7 +287,7 @@ PUT /admin/categories/3 {name: "后端"}
 | # | 用例 | 断言 |
 |---|---|---|
 | 1 | 新建重名分类 | 400 |
-| 2 | 名称首尾带空格 | 入库前被 strip |
+| 2 | 名称首尾带空格 | 入库前被 strip 掉 |
 | 3 | 更新分类时名称改成自己原名 | 成功（排除自己） |
 | 4 | 删除有文章的分类 | 400 |
 | 5 | 转移分类后再删 | 成功 |
@@ -298,8 +300,8 @@ PUT /admin/categories/3 {name: "后端"}
 
 ## 9. 开放问题
 
-1. **名称唯一性靠代码保证，没有唯一索引**：并发创建同名分类会插两条。
-   建议加 `UNIQUE(category_name)`。这需要你拍板（与 likes 唯一索引同类问题）。
+1. **名称唯一性**：查重靠代码，同时在新库加 `UNIQUE(category_name)` / `UNIQUE(tag_name)`。
+   加了索引后创建逻辑要捕获 `IntegrityError` 兜底，防止并发插入两条同名。
 2. **分类只有一级**：未来要不要支持二级分类？当前 ER 不支持，要加 `parent_id`。
    建议不做，够用。
 3. **`status=0` 的分类下还能有文章吗**：能。禁用只影响前台列表展示，不影响已有文章。

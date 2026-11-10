@@ -30,7 +30,7 @@ app/
 │   ├── logging.py              # LoggingConfigurator
 │   ├── errors.py               # ErrorCode + BizError
 │   ├── response.py             # ApiResponse + ResponseBuilder
-│   ├── security.py             # PasswordHasher + JWTManager
+│   ├── security.py             # PasswordHasher + JWTManager + CryptoBox
 │   ├── protocols.py            # 跨模块契约（Protocol）
 │   └── deps.py                 # FastAPI 依赖：db / redis / storage / current_user
 ├── db/
@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_access_expire_minutes: int = 15
     jwt_refresh_expire_hours: int = 72
+
+    # 模型 api_key 的对称加密密钥（Fernet key，32 字节 base64）。
+    # 与 jwt_secret 分开：换 JWT 密钥不该导致所有模型配置作废。
+    fernet_key: str
 
     minio_endpoint: str = "127.0.0.1:9000"
     minio_access_key: str = ""
@@ -241,7 +245,7 @@ class BizError(Exception):
         """
 ```
 
-### 3.6 安全：`PasswordHasher` / `JWTManager`
+### 3.6 安全：`PasswordHasher` / `JWTManager` / `CryptoBox`
 
 ```python
 class PasswordHasher:
@@ -278,6 +282,29 @@ class JWTManager:
     @staticmethod
     def generate_refresh_token() -> str:
         """32 字节随机 hex，同时充当会话标识。"""
+
+class CryptoBox:
+    """对称加解密，用于保管第三方密钥（目前只有模型的 api_key）。
+
+    用 cryptography 的 Fernet（AES-128-CBC + HMAC），不手搓 AES：
+    Fernet 自带完整性校验，密文被改过会直接抛 InvalidToken 而不是解密出垃圾。
+
+    密钥从 .env 的 FERNET_KEY 读，**不要复用 JWT_SECRET**：
+    换 JWT 密钥不该导致所有模型配置作废。
+    """
+
+    def __init__(self, key: str) -> None: ...
+
+    def encrypt(self, plain: str) -> str:
+        """返回 base64 文本，可直接存 VARCHAR 列。"""
+
+    def decrypt(self, cipher: str) -> str:
+        """解密。
+
+        Raises:
+            InvalidToken: 密钥换过或密文损坏。调用方要把它转成
+            「请重新填写模型密钥」，而不是 500 堆栈。
+        """
 ```
 
 ### 3.7 协议（跨模块契约）

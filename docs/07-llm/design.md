@@ -105,9 +105,16 @@ class LLMConfigService:
     async def list(self) -> list[LLMConfigResponse]:
         """列出全部配置，密钥脱敏。
 
-        脱敏规则：保留前 4 后 4，中间固定 ****。
-            sk-1234567890abcdef → sk-1****cdef
-        长度不足 12 的整个打码，避免泄露短 key 的全貌。
+        脱敏规则（照抄 Go 的 maskKey）：
+          - 空字符串 → ""
+          - 长度 ≤ 4 → "****"
+          - 其他     → 前 3 位 + "****" + 后 4 位
+
+            sk-1234567890abcdef → sk-****cdef
+            abcd                → ****
+            abcde               → abc****bcde
+
+        注意前缀是 3 位，长度阈值是 4：长度 ≤4 全部打码，5 位以上才保留前后缀。
         """
 
     async def get(self, config_id: int) -> LLMConfigResponse: ...
@@ -210,7 +217,7 @@ class SummaryService:
 |---|---|---|---|
 | `id` | `BIGINT` | PK | |
 | `base_url` | `VARCHAR(255)` | NOT NULL | 到 `/v1` 为止，如 `https://api.deepseek.com/v1` |
-| `api_key` | `VARCHAR(512)` | NOT NULL | 明文存库（见开放问题） |
+| `api_key` | `VARCHAR(512)` | NOT NULL | **Fernet 密文**（见 8.1），不是明文 |
 | `model` | `VARCHAR(128)` | NOT NULL | 如 `deepseek-chat` |
 | `type` | `SMALLINT` | NOT NULL DEFAULT 1 | 恒为 1（对话模型） |
 | `timeout_sec` | `INT` | DEFAULT 30 | 单次调用超时 |
@@ -332,16 +339,21 @@ POST /admin/articles/generate-summary {config_id, title, content}
 
 ## 8. 开放问题
 
-### 8.1 需要拍板：api_key 要不要加密存储
+### 8.1 api_key 存储：本轮 AES 加密
 
-| 方案 | 说明 | 成本 |
+| 方案 | 说明 | 结论 |
 |---|---|---|
-| A. 明文存（现状） | 与 Go 版一致，DB 泄露即密钥泄露 | 0 |
-| B. 应用层 AES 加密 | 需要管理加密密钥（放 `.env`），泄露 DB 不够还要泄露 ENV | +0.5 天 |
-| C. 走 KMS | 最安全，但引入外部依赖 | +2 天 |
+| A. 明文存 | 与 Go 版一致，DB 泄露即密钥泄露 | 否决 |
+| **B. 应用层 AES 加密** | 密钥放 `.env`（`SECRET_KEY`），库里存密文 | **本轮采用，+0.5 天** |
+| C. 走 KMS | 最安全但引入外部依赖 | 不做 |
 
-**建议 B**，理由是成本低且能挡住「数据库备份被拖走」这类最常见泄露路径。
-但如果这台 ECS 只有你自己用，A 也能接受。
+实现要点：
+
+- 用 `cryptography` 的 `Fernet`（AES-128-CBC + HMAC），比手搓 AES 少踩坑。
+- `api_key` 列存**密文**（长度会变长，`VARCHAR(512)` 够用）。
+- `resolve()` 取出后解密再传给 `LLMClient`；加解密逻辑集中在 `CryptoBox` 小类里。
+- 加密密钥换了，存量配置全部解不开 —— 启动时做一次自检：若解密失败，
+  记 error 日志并提示「请重新填写模型密钥」，不要让应用直接崩。
 
 ### 8.2 其他
 
