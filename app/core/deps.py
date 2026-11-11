@@ -20,6 +20,8 @@ from app.repositories.auth_repository import AuthRepository
 
 if TYPE_CHECKING:  # 只给类型检查用，避免运行期循环导入
     from app.services.auth.auth_service import AuthService
+    from app.services.taxonomy.category_service import CategoryService
+    from app.services.taxonomy.tag_service import TagService
     from app.services.user.user_service import UserService
 
 
@@ -143,6 +145,34 @@ def _build_auth_cache(settings: Settings, cache: SupportsCache):
         captcha_ttl=settings.business.captcha_expire_seconds,
         send_limit_ttl=settings.business.captcha_send_limit_seconds,
     )
+
+
+async def get_category_service(
+    db: AsyncSession = Depends(get_db),
+) -> "CategoryService":
+    """组装分类服务。
+
+    Returns:
+        绑定当前请求 session 的 CategoryService。
+    """
+    from app.repositories.taxonomy.category_repository import CategoryRepository
+    from app.services.taxonomy.category_service import CategoryService
+
+    return CategoryService(session=db, repo=CategoryRepository(db))
+
+
+async def get_tag_service(
+    db: AsyncSession = Depends(get_db),
+) -> "TagService":
+    """组装标签服务。
+
+    Returns:
+        绑定当前请求 session 的 TagService。
+    """
+    from app.repositories.taxonomy.tag_repository import TagRepository
+    from app.services.taxonomy.tag_service import TagService
+
+    return TagService(session=db, repo=TagRepository(db))
 
 
 @dataclass(frozen=True, slots=True)
