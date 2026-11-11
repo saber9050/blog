@@ -23,11 +23,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from app.api.v1 import health
+from app.api.v1.about import AboutController
 from app.api.v1.admin.article import AdminArticleController
+from app.api.v1.admin.comment import AdminCommentController
 from app.api.v1.admin.taxonomy import AdminTaxonomyController
 from app.api.v1.admin.users import AdminUserController
 from app.api.v1.article import ArticleController
 from app.api.v1.auth import AuthController
+from app.api.v1.comment import CommentController
 from app.api.v1.taxonomy import TaxonomyPublicController
 from app.api.v1.user import UserController
 from app.core.config import Settings, get_settings
@@ -122,6 +125,9 @@ class ApplicationFactory:
         app.include_router(AdminTaxonomyController().router, prefix="/api/v1")
         app.include_router(ArticleController().router, prefix="/api/v1")
         app.include_router(AdminArticleController().router, prefix="/api/v1")
+        app.include_router(CommentController().router, prefix="/api/v1")
+        app.include_router(AdminCommentController().router, prefix="/api/v1")
+        app.include_router(AboutController().router, prefix="/api/v1")
 
         logger.info("应用装配完成，共 {} 条路由", len(app.routes))
         return app

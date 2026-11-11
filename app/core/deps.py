@@ -19,9 +19,11 @@ from app.db.database import Database
 from app.repositories.auth_repository import AuthRepository
 
 if TYPE_CHECKING:  # 只给类型检查用，避免运行期循环导入
+    from app.services.about_service import AboutService
     from app.services.article.admin_article_service import AdminArticleService
     from app.services.article.article_service import ArticleService
     from app.services.auth.auth_service import AuthService
+    from app.services.comment_service import CommentService
     from app.services.taxonomy.category_service import CategoryService
     from app.services.taxonomy.tag_service import TagService
     from app.services.user.user_service import UserService
@@ -194,6 +196,45 @@ async def get_admin_article_service(
         storage=storage,
         settings=settings,
     )
+
+
+async def get_comment_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    storage: SupportsFileStorage = Depends(get_storage),
+) -> "CommentService":
+    """组装评论服务。
+
+    Returns:
+        可直接使用的 CommentService。
+    """
+    from app.repositories.comment_repository import CommentRepository
+    from app.repositories.user_repository import UserRepository
+    from app.services.comment_service import CommentService
+
+    settings: Settings = request.app.state.settings
+    return CommentService(
+        session=db,
+        repo=CommentRepository(db),
+        user_repo=UserRepository(db),
+        storage=storage,
+        settings=settings,
+    )
+
+
+async def get_about_service(
+    db: AsyncSession = Depends(get_db),
+    storage: SupportsFileStorage = Depends(get_storage),
+) -> "AboutService":
+    """组装关于页服务。
+
+    Returns:
+        可直接使用的 AboutService。
+    """
+    from app.repositories.about_repository import AboutRepository
+    from app.services.about_service import AboutService
+
+    return AboutService(session=db, repo=AboutRepository(db), storage=storage)
 
 
 async def get_category_service(
