@@ -15,7 +15,6 @@
 """
 
 import glob
-import io
 import os
 import re
 import sys
@@ -41,7 +40,7 @@ def collect_from_docs() -> dict[tuple[str, str], str]:
     found: dict[tuple[str, str], str] = {}
     for path in sorted(glob.glob("docs/*/api.md")):
         module = os.path.basename(os.path.dirname(path))
-        text = io.open(path, encoding="utf-8").read()
+        text = open(path, encoding="utf-8").read()
         for method, api_path in _DOC_ROW.findall(text):
             if "/api/v1" in api_path:
                 found[(api_path, method)] = module
