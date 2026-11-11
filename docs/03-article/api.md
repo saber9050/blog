@@ -11,9 +11,9 @@
 | 1 | GET | `/api/v1/articles` | 可选 | 文章列表 |
 | 2 | GET | `/api/v1/articles/random` | 无 | 随机一篇 |
 | 3 | GET | `/api/v1/articles/stats` | 无 | 站点统计 |
-| 4 | GET | `/api/v1/articles/{id}` | 可选 | 文章详情 |
-| 5 | POST | `/api/v1/articles/{id}/like` | 需登录 | 点赞 |
-| 6 | DELETE | `/api/v1/articles/{id}/like` | 需登录 | 取消点赞 |
+| 4 | GET | `/api/v1/articles/{article_id}` | 可选 | 文章详情 |
+| 5 | POST | `/api/v1/articles/{article_id}/like` | 需登录 | 点赞 |
+| 6 | DELETE | `/api/v1/articles/{article_id}/like` | 需登录 | 取消点赞 |
 
 **后台（需管理员）**
 
@@ -21,8 +21,8 @@
 |---|---|---|---|
 | 7 | GET | `/api/v1/admin/articles` | 文章列表 |
 | 8 | POST | `/api/v1/admin/articles` | 新建 |
-| 9 | PUT | `/api/v1/admin/articles/{id}` | 更新 |
-| 10 | DELETE | `/api/v1/admin/articles/{id}` | 删除 |
+| 9 | PUT | `/api/v1/admin/articles/{article_id}` | 更新 |
+| 10 | DELETE | `/api/v1/admin/articles/{article_id}` | 删除 |
 | 11 | PUT | `/api/v1/admin/articles/transfer` | 批量转移分类 |
 | 12 | POST | `/api/v1/admin/upload` | 上传图片 |
 
@@ -162,7 +162,7 @@ score = like_count * 3 + views * 1 + comment_count * 2
 
 ## 4. 文章详情
 
-### GET /api/v1/articles/{id}
+### GET /api/v1/articles/{article_id}
 
 **鉴权**：可选
 
@@ -201,7 +201,7 @@ score = like_count * 3 + views * 1 + comment_count * 2
 
 ## 5. 点赞
 
-### POST /api/v1/articles/{id}/like
+### POST /api/v1/articles/{article_id}/like
 
 **鉴权**：需登录
 
@@ -226,7 +226,7 @@ score = like_count * 3 + views * 1 + comment_count * 2
 
 ## 6. 取消点赞
 
-### DELETE /api/v1/articles/{id}/like
+### DELETE /api/v1/articles/{article_id}/like
 
 **鉴权**：需登录
 
@@ -354,7 +354,7 @@ score = like_count * 3 + views * 1 + comment_count * 2
 
 ## 9. 更新文章
 
-### PUT /api/v1/admin/articles/{id}
+### PUT /api/v1/admin/articles/{article_id}
 
 **鉴权**：管理员
 
@@ -382,7 +382,7 @@ score = like_count * 3 + views * 1 + comment_count * 2
 
 ## 10. 删除文章
 
-### DELETE /api/v1/admin/articles/{id}
+### DELETE /api/v1/admin/articles/{article_id}
 
 **鉴权**：管理员
 

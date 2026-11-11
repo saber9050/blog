@@ -180,3 +180,31 @@ async def login(self, req: LoginRequest) -> LoginResponse:
 - `data` 为 `None` 时**不输出该字段**
 - 时间格式：`2026-11-09T21:39:04Z`（本地时间 + 字面 Z，照抄 Go 的 bug）
 - 分页字段：文章列表用 `page_size`，用户列表用 `pageSize`（历史原因，不要统一）
+
+---
+
+## 接口实现进度
+
+| 模块 | 接口数 | 状态 | 提交 |
+|---|---|---|---|
+| 00 foundation | 1 | 完成 | `3f41bb0` |
+| 01 auth | 10 | 完成 | `15d5a97` |
+| 02 user | 12 | 完成 | `b37f30f` |
+| 03 article | 12 | 完成 | `1878c0d` |
+| 04 comment | 7 | 完成 | `58a953f` |
+| 05 taxonomy | 12 | 完成 | `2354c1d` |
+| 06 about | 2 | 完成 | `58a953f` |
+| 07 llm | 7 | **待做** | — |
+| **合计** | **63** | **56 已实现** | |
+
+### 校验契约是否漂移
+
+```bash
+python scripts/check_api_contract.py
+```
+
+从各模块 `api.md` 的表格里抽接口，与 FastAPI 实际注册的路由逐条比对。
+完全一致时退出码 0，有差异时返回 1（可直接挂进 CI）。
+
+它**只校路径与方法**，字段级契约靠 `tests/` 里的用例守着 ——
+那些用例断言了 `staus` / `create_at` / `pageSize` / `git_hub` 这类历史拼写。

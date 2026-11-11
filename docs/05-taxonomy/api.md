@@ -19,12 +19,12 @@
 |---|---|---|---|
 | 5 | GET | `/api/v1/admin/categories` | 分类列表 |
 | 6 | POST | `/api/v1/admin/categories` | 新建分类 |
-| 7 | PUT | `/api/v1/admin/categories/{id}` | 更新分类 |
-| 8 | DELETE | `/api/v1/admin/categories/{id}` | 删除分类 |
+| 7 | PUT | `/api/v1/admin/categories/{category_id}` | 更新分类 |
+| 8 | DELETE | `/api/v1/admin/categories/{category_id}` | 删除分类 |
 | 9 | GET | `/api/v1/admin/tags` | 标签列表 |
 | 10 | POST | `/api/v1/admin/tags` | 新建标签 |
-| 11 | PUT | `/api/v1/admin/tags/{id}` | 更新标签 |
-| 12 | DELETE | `/api/v1/admin/tags/{id}` | 删除标签 |
+| 11 | PUT | `/api/v1/admin/tags/{tag_id}` | 更新标签 |
+| 12 | DELETE | `/api/v1/admin/tags/{tag_id}` | 删除标签 |
 
 ---
 
@@ -170,7 +170,7 @@
 
 ## 7. 更新分类
 
-### PUT /api/v1/admin/categories/{id}
+### PUT /api/v1/admin/categories/{category_id}
 
 **请求体**：同新建（`name` 与 `status` 都必填）
 
@@ -197,7 +197,7 @@
 
 ## 8. 删除分类
 
-### DELETE /api/v1/admin/categories/{id}
+### DELETE /api/v1/admin/categories/{category_id}
 
 **成功响应**
 
@@ -271,7 +271,7 @@
 
 ## 11. 更新标签
 
-### PUT /api/v1/admin/tags/{id}
+### PUT /api/v1/admin/tags/{tag_id}
 
 **请求体**：同新建
 
@@ -287,7 +287,7 @@
 
 ## 12. 删除标签
 
-### DELETE /api/v1/admin/tags/{id}
+### DELETE /api/v1/admin/tags/{tag_id}
 
 **成功响应**
 

@@ -934,11 +934,11 @@ pkg/llmclient/embeddings.go
 
 | 路由族 | 条目数 | 明细 |
 |---|---|---|
-| `/api/v1/articles/{id}/chat/context` + `/api/v1/chat/*` | 8 | 上下文、建会话、消息列表、发消息、工具记录、改会话、删会话、文章候选 |
+| `/api/v1/articles/{article_id}/chat/context` + `/api/v1/chat/*` | 8 | 上下文、建会话、消息列表、发消息、工具记录、改会话、删会话、文章候选 |
 | `/api/v1/admin/chat-sessions/*` | 3 | 列表、详情、删除 |
 | `/api/v1/admin/chunks/*` | 5 | 列表、统计、按节查、详情、批量删除 |
 | `/api/v1/admin/vector/*` | 2 | schema、reset |
-| `/api/v1/admin/articles/{id}/*` | 2 | vectorize、vector-status |
+| `/api/v1/admin/articles/{article_id}/*` | 2 | vectorize、vector-status |
 
 ## 附录 B：本次不做但值得记下来的技术债
 

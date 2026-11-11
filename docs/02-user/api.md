@@ -23,8 +23,8 @@
 |---|---|---|---|
 | 9 | GET | `/api/v1/admin/users` | 用户列表 |
 | 10 | POST | `/api/v1/admin/users` | 创建用户 |
-| 11 | PUT | `/api/v1/admin/users/{id}` | 启用/禁用 |
-| 12 | DELETE | `/api/v1/admin/users/{id}` | 删除（软删） |
+| 11 | PUT | `/api/v1/admin/users/{user_id}` | 启用/禁用 |
+| 12 | DELETE | `/api/v1/admin/users/{user_id}` | 删除（软删） |
 
 ---
 
@@ -403,7 +403,7 @@
 
 ## 11. 启用 / 禁用用户
 
-### PUT /api/v1/admin/users/{id}
+### PUT /api/v1/admin/users/{user_id}
 
 **路径参数**：`id` — 用户 ID
 
@@ -436,7 +436,7 @@
 
 ## 12. 删除用户
 
-### DELETE /api/v1/admin/users/{id}
+### DELETE /api/v1/admin/users/{user_id}
 
 **成功响应**
 

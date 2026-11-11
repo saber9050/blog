@@ -8,17 +8,17 @@
 
 | # | 方法 | 路径 | 鉴权 | 说明 |
 |---|---|---|---|---|
-| 1 | GET | `/api/v1/articles/{id}/comments` | 无 | 一级评论列表 |
-| 2 | GET | `/api/v1/articles/{id}/comments/{comment_id}/replies` | 无 | 二级回复列表 |
-| 3 | POST | `/api/v1/articles/{id}/comments` | 需登录 | 发表评论/回复 |
-| 4 | DELETE | `/api/v1/articles/{id}/comments/{comment_id}` | 需登录 | 删除评论 |
+| 1 | GET | `/api/v1/articles/{article_id}/comments` | 无 | 一级评论列表 |
+| 2 | GET | `/api/v1/articles/{article_id}/comments/{comment_id}/replies` | 无 | 二级回复列表 |
+| 3 | POST | `/api/v1/articles/{article_id}/comments` | 需登录 | 发表评论/回复 |
+| 4 | DELETE | `/api/v1/articles/{article_id}/comments/{comment_id}` | 需登录 | 删除评论 |
 
 **后台（需管理员）**
 
 | # | 方法 | 路径 | 说明 |
 |---|---|---|---|
 | 5 | GET | `/api/v1/admin/comments` | 评论列表 |
-| 6 | DELETE | `/api/v1/admin/comments/{id}` | 删除单条 |
+| 6 | DELETE | `/api/v1/admin/comments/{comment_id}` | 删除单条 |
 | 7 | DELETE | `/api/v1/admin/comments` | 批量删除 |
 
 ---
@@ -60,7 +60,7 @@
 
 ## 1. 一级评论列表
 
-### GET /api/v1/articles/{id}/comments
+### GET /api/v1/articles/{article_id}/comments
 
 **路径参数**：`id` — 文章 ID
 
@@ -111,7 +111,7 @@
 
 ## 2. 二级回复列表
 
-### GET /api/v1/articles/{id}/comments/{comment_id}/replies
+### GET /api/v1/articles/{article_id}/comments/{comment_id}/replies
 
 **路径参数**
 
@@ -142,7 +142,7 @@
 
 ## 3. 发表评论 / 回复
 
-### POST /api/v1/articles/{id}/comments
+### POST /api/v1/articles/{article_id}/comments
 
 **鉴权**：需登录
 
@@ -205,7 +205,7 @@
 
 ## 4. 删除评论
 
-### DELETE /api/v1/articles/{id}/comments/{comment_id}
+### DELETE /api/v1/articles/{article_id}/comments/{comment_id}
 
 **鉴权**：需登录。作者本人或管理员可删，其他人 403。
 
@@ -279,7 +279,7 @@
 
 ## 6. 删除单条评论
 
-### DELETE /api/v1/admin/comments/{id}
+### DELETE /api/v1/admin/comments/{comment_id}
 
 **鉴权**：管理员
 
