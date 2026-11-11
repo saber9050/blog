@@ -19,6 +19,8 @@ from app.db.database import Database
 from app.repositories.auth_repository import AuthRepository
 
 if TYPE_CHECKING:  # 只给类型检查用，避免运行期循环导入
+    from app.services.article.admin_article_service import AdminArticleService
+    from app.services.article.article_service import ArticleService
     from app.services.auth.auth_service import AuthService
     from app.services.taxonomy.category_service import CategoryService
     from app.services.taxonomy.tag_service import TagService
@@ -144,6 +146,53 @@ def _build_auth_cache(settings: Settings, cache: SupportsCache):
         cache,
         captcha_ttl=settings.business.captcha_expire_seconds,
         send_limit_ttl=settings.business.captcha_send_limit_seconds,
+    )
+
+
+async def get_article_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    storage: SupportsFileStorage = Depends(get_storage),
+) -> "ArticleService":
+    """组装文章服务（前台）。
+
+    Returns:
+        可直接使用的 ArticleService。
+    """
+    from app.repositories.article_repository import ArticleRepository
+    from app.services.article.article_service import ArticleService
+
+    settings: Settings = request.app.state.settings
+    return ArticleService(
+        session=db,
+        repo=ArticleRepository(db),
+        storage=storage,
+        settings=settings,
+    )
+
+
+async def get_admin_article_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    storage: SupportsFileStorage = Depends(get_storage),
+) -> "AdminArticleService":
+    """组装文章服务（后台）。
+
+    与前台用同一个仓储和 storage，只是 service 类不同 ——
+    后台要做写操作，前台只读。
+
+    Returns:
+        可直接使用的 AdminArticleService。
+    """
+    from app.repositories.article_repository import ArticleRepository
+    from app.services.article.admin_article_service import AdminArticleService
+
+    settings: Settings = request.app.state.settings
+    return AdminArticleService(
+        session=db,
+        repo=ArticleRepository(db),
+        storage=storage,
+        settings=settings,
     )
 
 
