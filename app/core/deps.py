@@ -6,14 +6,20 @@
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.core.errors import BizError, ErrorCode
 from app.core.protocols import SupportsCache, SupportsFileStorage
 from app.core.security import JWTManager
 from app.db.database import Database
+from app.repositories.auth_repository import AuthRepository
+
+if TYPE_CHECKING:  # 只给类型检查用，避免运行期循环导入
+    from app.services.auth.auth_service import AuthService
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
@@ -54,6 +60,43 @@ def get_storage(request: Request) -> SupportsFileStorage:
 def get_jwt(request: Request) -> JWTManager:
     """获取 JWT 管理器。"""
     return request.app.state.jwt
+
+
+async def get_auth_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    cache: SupportsCache = Depends(get_cache),
+) -> "AuthService":
+    """组装认证服务。
+
+    每次请求新建对象，不做单例：这些对象本身很轻（只是持有引用），
+    但 `AuthRepository` 必须绑定**当前请求的 session** ——
+    做成单例就会跨请求复用连接，事务边界全乱。
+
+    Returns:
+        可直接使用的 AuthService。
+    """
+    # 延迟导入：deps 被几乎所有模块引用，顶层导入 auth 会形成拉长的启动链
+    from app.services.auth.auth_cache import AuthCache
+    from app.services.auth.auth_service import AuthService
+    from app.services.auth.captcha import ImageCaptchaGenerator
+    from app.services.auth.mailer import EmailSender
+
+    settings: Settings = request.app.state.settings
+    return AuthService(
+        session=db,
+        repo=AuthRepository(db),
+        cache=AuthCache(
+            cache,
+            captcha_ttl=settings.business.captcha_expire_seconds,
+            send_limit_ttl=settings.business.captcha_send_limit_seconds,
+        ),
+        captcha=ImageCaptchaGenerator(),
+        mailer=EmailSender(settings),
+        hasher=request.app.state.hasher,
+        jwt_manager=request.app.state.jwt,
+        settings=settings,
+    )
 
 
 @dataclass(frozen=True, slots=True)

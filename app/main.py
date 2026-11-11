@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from app.api.v1 import health
+from app.api.v1.auth import AuthController
 from app.core.config import Settings, get_settings
 from app.core.logging import LoggingConfigurator, log_startup_banner
 from app.core.security import CryptoBox, JWTManager, PasswordHasher
@@ -31,6 +32,7 @@ from app.integrations.minio_storage import MinioStorage
 from app.integrations.redis_client import build_cache
 from app.middleware.exception import register_exception_handlers
 from app.middleware.request_log import register_request_log
+from app.services.bootstrap import AdminBootstrapper
 
 
 class ApplicationFactory:
@@ -107,6 +109,7 @@ class ApplicationFactory:
         # ---- 路由 ----
         # 注意：静态路径要注册在 {id} 之前（见 docs/README.md 的路由规范）
         app.include_router(health.router, prefix="/api/v1")
+        app.include_router(AuthController().router, prefix="/api/v1")
 
         logger.info("应用装配完成，共 {} 条路由", len(app.routes))
         return app
@@ -138,6 +141,11 @@ class ApplicationFactory:
             "OK" if storage_ok else "FAIL",
         )
 
+        # 管理员初始化放在探活之后：库都连不上时去插数据是徒劳。
+        # 失败不阻断启动，见 AdminBootstrapper 的说明。
+        if db_ok:
+            await self._ensure_admin(app)
+
         if settings.is_debug:
             logger.info(
                 "调试模式：接口文档 http://{}:{}/docs", settings.app.host, settings.app.port
@@ -168,6 +176,23 @@ class ApplicationFactory:
         except Exception as exc:  # noqa: BLE001 - 启动阶段不能让任何异常阻断
             logger.error("{} 探活异常：{}: {}", name, type(exc).__name__, exc)
             return False
+
+    async def _ensure_admin(self, app: FastAPI) -> None:
+        """确保库里有一个默认管理员。
+
+        只在数据库探活成功时调用 —— 库都连不上还去插数据是徒劳。
+        失败不抛异常，见 `AdminBootstrapper` 的说明。
+
+        Args:
+            app: 用于取 db / hasher / settings。
+        """
+        async with app.state.db.session() as session:
+            bootstrapper = AdminBootstrapper(
+                session=session,
+                hasher=app.state.hasher,
+                settings=app.state.settings,
+            )
+            await bootstrapper.ensure_admin()
 
     async def _check_database(self, app: FastAPI) -> bool:
         """数据库探活。
