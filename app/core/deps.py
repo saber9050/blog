@@ -20,6 +20,7 @@ from app.repositories.auth_repository import AuthRepository
 
 if TYPE_CHECKING:  # 只给类型检查用，避免运行期循环导入
     from app.services.auth.auth_service import AuthService
+    from app.services.user.user_service import UserService
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
@@ -77,7 +78,6 @@ async def get_auth_service(
         可直接使用的 AuthService。
     """
     # 延迟导入：deps 被几乎所有模块引用，顶层导入 auth 会形成拉长的启动链
-    from app.services.auth.auth_cache import AuthCache
     from app.services.auth.auth_service import AuthService
     from app.services.auth.captcha import ImageCaptchaGenerator
     from app.services.auth.mailer import EmailSender
@@ -86,16 +86,62 @@ async def get_auth_service(
     return AuthService(
         session=db,
         repo=AuthRepository(db),
-        cache=AuthCache(
-            cache,
-            captcha_ttl=settings.business.captcha_expire_seconds,
-            send_limit_ttl=settings.business.captcha_send_limit_seconds,
-        ),
+        cache=_build_auth_cache(settings, cache),
         captcha=ImageCaptchaGenerator(),
         mailer=EmailSender(settings),
         hasher=request.app.state.hasher,
         jwt_manager=request.app.state.jwt,
         settings=settings,
+    )
+
+
+async def get_user_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    cache: SupportsCache = Depends(get_cache),
+    storage: SupportsFileStorage = Depends(get_storage),
+    auth_service: "AuthService" = Depends(get_auth_service),
+) -> "UserService":
+    """组装用户服务。
+
+    `auth_service` 是注入进来的，不是自己 new：这样两者共用
+    **同一个 session 和同一个缓存实例**，验证码校验与写库在同一个事务上下文里。
+
+    方法级和 router 级的 `require_admin` 看似会跑两次，但 FastAPI 对
+    同一请求内的相同依赖有缓存，实际只执行一次。
+
+    Returns:
+        可直接使用的 UserService。
+    """
+    from app.repositories.user_repository import UserRepository
+    from app.services.auth.mailer import EmailSender
+    from app.services.user.user_service import UserService
+
+    settings: Settings = request.app.state.settings
+    return UserService(
+        session=db,
+        repo=UserRepository(db),
+        auth_service=auth_service,
+        cache=_build_auth_cache(settings, cache),
+        storage=storage,
+        mailer=EmailSender(settings),
+        hasher=request.app.state.hasher,
+        jwt_manager=request.app.state.jwt,
+        settings=settings,
+    )
+
+
+def _build_auth_cache(settings: Settings, cache: SupportsCache):
+    """构造 AuthCache。
+
+    TTL 都从配置取，避免两处写死不同的数值。
+    """
+    from app.services.auth.auth_cache import AuthCache
+
+    return AuthCache(
+        cache,
+        captcha_ttl=settings.business.captcha_expire_seconds,
+        send_limit_ttl=settings.business.captcha_send_limit_seconds,
     )
 
 

@@ -46,6 +46,9 @@ class AppSection(BaseModel):
     mode: Literal["debug", "release"] = "release"
     host: str = "127.0.0.1"
     port: int = 8000
+    # 对外可访问的站点根地址，用于拼邮件里的确认链接。
+    # service 层拿不到 request，只能靠配置；部署时改成真实域名。
+    site_url: str = "http://127.0.0.1:8000"
 
 
 class MySQLSection(BaseModel):

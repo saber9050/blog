@@ -155,7 +155,7 @@ class AuthService:
             raise BizError(ErrorCode.NOT_FOUND, "该邮箱未注册")
 
         self._ensure_active(user)
-        await self._verify_email_captcha(req.email, req.purpose, req.captcha)
+        await self.verify_email_captcha(req.email, req.purpose, req.captcha)
 
         access_token = await self._issue_tokens(user)
         logger.info("邮箱验证码登录成功 id={} email={}", user.id, req.email)
@@ -231,7 +231,7 @@ class AuthService:
 
         # purpose 固定 reset_password：不同用途的验证码不能混用，
         # 否则「登录验证码」能拿来改密码
-        await self._verify_email_captcha(req.email, "reset_password", req.captcha)
+        await self.verify_email_captcha(req.email, "reset_password", req.captcha)
 
         await self._repo.update_password(user.id, self._hasher.hash(req.new_password))
         await self._session.commit()
@@ -377,7 +377,7 @@ class AuthService:
         if expected.strip().lower() != code.strip().lower():
             raise BizError(ErrorCode.BAD_REQUEST, "验证码错误")
 
-    async def _verify_email_captcha(self, email: str, purpose: str, code: str) -> None:
+    async def verify_email_captcha(self, email: str, purpose: str, code: str) -> None:
         """校验邮箱验证码。
 
         与图形验证码不同：**只在成功后删除**。

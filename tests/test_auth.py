@@ -15,8 +15,6 @@ import pytest
 import redis as sync_redis
 from fastapi.testclient import TestClient
 
-from app.main import create_app
-
 API = "/api/v1/auth"
 
 # 测试数据的标记，清理时按它删
@@ -24,14 +22,12 @@ TEST_PREFIX = "__t_"
 
 
 @pytest.fixture(scope="module")
-def client():
-    """启动完整应用（含 lifespan：连库、建管理员）。
+def client(live_client):
+    """复用 conftest 的 live_client（已禁用真实发信）。
 
     module 级：整个文件共用一次启动，避免每个用例都重连数据库。
     """
-    app = create_app()
-    with TestClient(app) as test_client:
-        yield test_client
+    return live_client
 
 
 @pytest.fixture(scope="module", autouse=True)

@@ -19,6 +19,8 @@ class AuthCache:
     CAPTCHA_EMAIL = "captcha:email:{email}:{purpose}"
     EMAIL_LIMIT = "captcha:limit:{email}"
     REFRESH_TOKEN = "refresh:{user_id}"
+    # 一次性 token 黑名单（目前用于换绑邮箱的确认链接）
+    TOKEN_BLACKLIST = "blacklist:token:{token}"
 
     def __init__(
         self,
@@ -123,3 +125,24 @@ class AuthCache:
     async def delete_refresh_token(self, user_id: int) -> None:
         """删 refresh token（登出）。"""
         await self._cache.delete(self.REFRESH_TOKEN.format(user_id=user_id))
+
+    # ---------- 一次性 token 黑名单 ----------
+
+    async def blacklist_token(self, token: str, ttl_seconds: int = 300) -> None:
+        """把用过的 token 拉黑。
+
+        用于「换绑邮箱确认链接」这类一次性凭证：
+        链接在有效期内可以被重复点击，不拉黑就会重复写库。
+        TTL 与 token 自身有效期一致即可 —— 过期后再拉黑没意义。
+
+        Args:
+            token: 原始 JWT 字符串。
+            ttl_seconds: 保留多久。
+        """
+        await self._cache.set(
+            self.TOKEN_BLACKLIST.format(token=token), "1", ttl_seconds=ttl_seconds
+        )
+
+    async def is_token_blacklisted(self, token: str) -> bool:
+        """token 是否已被使用过。"""
+        return await self._cache.get(self.TOKEN_BLACKLIST.format(token=token)) is not None

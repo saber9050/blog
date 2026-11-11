@@ -18,6 +18,8 @@ app:
   mode: "debug"
   host: "127.0.0.1"
   port: 8000
+  # 邮件里确认链接用的站点根地址，部署时改成真实域名
+  site_url: "http://127.0.0.1:8000"
 
 database:
   mysql:

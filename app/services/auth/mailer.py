@@ -126,6 +126,49 @@ class EmailSender:
         message.set_content(body)
         return message
 
+    async def send_email_change_link(self, to_email: str, link: str, expire_minutes: int) -> None:
+        """发送换绑邮箱的确认链接。
+
+        与验证码邮件分开：这里要带一个可点击的 URL，
+        纯文本邮件里裸链接大多数客户端会自动识别为可点。
+
+        Args:
+            to_email: 新邮箱地址。
+            link: 完整确认链接（含 token）。
+            expire_minutes: 有效期分钟数，写进正文提醒用户。
+
+        Raises:
+            BizError: 500 发送失败。
+        """
+        if not self.is_configured:
+            if self._settings.is_debug:
+                logger.warning(
+                    "SMTP 未配置（debug 降级）：确认链接不发送 | to={} link={}", to_email, link
+                )
+                return
+            logger.error("SMTP 未配置，无法发送确认邮件（release 模式）")
+            raise BizError(ErrorCode.INTERNAL_ERROR, "给新邮箱发送邮件失败")
+
+        body = (
+            "你正在申请修改博客账号的绑定邮箱。\n\n"
+            f"请点击下面的链接完成确认（{expire_minutes} 分钟内有效）：\n\n"
+            f"{link}\n\n"
+            "如果这不是你本人的操作，忽略本邮件即可，邮箱不会变更。\n"
+        )
+        message = EmailMessage()
+        message["From"] = formataddr((self._settings.app.name, self._smtp.username))
+        message["To"] = to_email
+        message["Subject"] = "确认修改绑定邮箱"
+        message.set_content(body)
+
+        try:
+            await to_thread.run_sync(self._send_sync, message)
+        except (smtplib.SMTPException, OSError) as exc:
+            logger.error("发送确认邮件失败 to={}：{}", to_email, exc)
+            raise BizError(ErrorCode.INTERNAL_ERROR, "给新邮箱发送邮件失败") from exc
+
+        logger.info("确认邮件已发送 to={}", to_email)
+
     def _send_sync(self, message: EmailMessage) -> None:
         """在线程池里执行的同步发送。
 
