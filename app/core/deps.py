@@ -24,6 +24,7 @@ if TYPE_CHECKING:  # 只给类型检查用，避免运行期循环导入
     from app.services.article.article_service import ArticleService
     from app.services.auth.auth_service import AuthService
     from app.services.comment_service import CommentService
+    from app.services.llm_service import LLMService
     from app.services.taxonomy.category_service import CategoryService
     from app.services.taxonomy.tag_service import TagService
     from app.services.user.user_service import UserService
@@ -235,6 +236,31 @@ async def get_about_service(
     from app.services.about_service import AboutService
 
     return AboutService(session=db, repo=AboutRepository(db), storage=storage)
+
+
+async def get_llm_service(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> "LLMService":
+    """组装 AI 模型服务。
+
+    `CryptoBox` 从 `app.state` 取 —— 它的密钥来自配置，
+    全局一个实例即可（Fernet 对象本身无状态）。
+
+    Returns:
+        可直接使用的 LLMService。
+    """
+    from app.integrations.llm_client import LLMClient
+    from app.repositories.llm_config_repository import LLMConfigRepository
+    from app.services.llm_service import LLMService
+
+    return LLMService(
+        session=db,
+        repo=LLMConfigRepository(db),
+        client=LLMClient(),
+        crypto=request.app.state.crypto,
+        settings=request.app.state.settings,
+    )
 
 
 async def get_category_service(

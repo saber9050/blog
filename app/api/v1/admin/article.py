@@ -10,6 +10,7 @@ from app.core.deps import (
     CurrentUser,
     get_admin_article_service,
     get_current_user,
+    get_llm_service,
     require_admin,
 )
 from app.core.response import ResponseBuilder
@@ -22,7 +23,9 @@ from app.schemas.article import (
     TransferCountResponse,
     UploadResponse,
 )
+from app.schemas.llm import GenerateSummaryRequest, SummaryResponse
 from app.services.article.admin_article_service import AdminArticleService
+from app.services.llm_service import LLMService
 
 
 def _parse_query(
@@ -70,6 +73,14 @@ class AdminArticleController:
         # ---- 静态路径（必须在 {article_id} 之前）----
         r.add_api_route(
             "/articles/transfer", self.transfer_category, methods=["PUT"], summary="批量转移分类"
+        )
+        # 摘要生成也挂在 /admin/articles 下，实现在 07-llm 模块（依赖模型配置）。
+        # 放在 {article_id} 之前，避免将来加 POST /articles/{id} 时踩坑
+        r.add_api_route(
+            "/articles/generate-summary",
+            self.generate_summary,
+            methods=["POST"],
+            summary="生成文章摘要",
         )
         # ---- 动态路径 ----
         r.add_api_route(
@@ -127,6 +138,19 @@ class AdminArticleController:
         """把某个分类下的文章全部转到另一个分类。删分类前用它腾空。"""
         count = await service.transfer_category(req.from_type_id, req.to_type_id)
         return ResponseBuilder.ok(TransferCountResponse(count=count))
+
+    async def generate_summary(
+        self,
+        req: GenerateSummaryRequest,
+        service: LLMService = Depends(get_llm_service),
+    ):
+        """生成文章摘要。
+
+        **不落库**：前端拿到后填进编辑器的摘要框，用户确认后随文章保存。
+        调用耗时通常 3-10 秒，Nginx 的 `proxy_read_timeout` 要大于 60 秒。
+        """
+        summary = await service.generate_summary(req)
+        return ResponseBuilder.ok(SummaryResponse(summary=summary))
 
     async def upload_image(
         self,

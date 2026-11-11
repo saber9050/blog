@@ -26,6 +26,7 @@ from app.api.v1 import health
 from app.api.v1.about import AboutController
 from app.api.v1.admin.article import AdminArticleController
 from app.api.v1.admin.comment import AdminCommentController
+from app.api.v1.admin.llm import AdminLLMController
 from app.api.v1.admin.taxonomy import AdminTaxonomyController
 from app.api.v1.admin.users import AdminUserController
 from app.api.v1.article import ArticleController
@@ -128,6 +129,7 @@ class ApplicationFactory:
         app.include_router(CommentController().router, prefix="/api/v1")
         app.include_router(AdminCommentController().router, prefix="/api/v1")
         app.include_router(AboutController().router, prefix="/api/v1")
+        app.include_router(AdminLLMController().router, prefix="/api/v1")
 
         logger.info("应用装配完成，共 {} 条路由", len(app.routes))
         return app

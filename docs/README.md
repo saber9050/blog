@@ -194,8 +194,8 @@ async def login(self, req: LoginRequest) -> LoginResponse:
 | 04 comment | 7 | 完成 | `58a953f` |
 | 05 taxonomy | 12 | 完成 | `2354c1d` |
 | 06 about | 2 | 完成 | `58a953f` |
-| 07 llm | 7 | **待做** | — |
-| **合计** | **63** | **56 已实现** | |
+| 07 llm | 7 | 完成 | `P6` |
+| **合计** | **63** | **63 已实现** | |
 
 ### 校验契约是否漂移
 

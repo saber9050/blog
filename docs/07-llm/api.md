@@ -7,11 +7,11 @@
 | # | 方法 | 路径 | 鉴权 | 说明 |
 |---|---|---|---|---|
 | 1 | GET | `/api/v1/admin/llm-configs` | 管理员 | 配置列表 |
-| 2 | GET | `/api/v1/admin/llm-configs/{id}` | 管理员 | 配置详情 |
+| 2 | GET | `/api/v1/admin/llm-configs/{config_id}` | 管理员 | 配置详情 |
 | 3 | POST | `/api/v1/admin/llm-configs/test` | 管理员 | 测试连接（不落库） |
 | 4 | POST | `/api/v1/admin/llm-configs` | 管理员 | 新建配置 |
-| 5 | PUT | `/api/v1/admin/llm-configs/{id}` | 管理员 | 更新运行参数 |
-| 6 | DELETE | `/api/v1/admin/llm-configs/{id}` | 管理员 | 删除配置 |
+| 5 | PUT | `/api/v1/admin/llm-configs/{config_id}` | 管理员 | 更新运行参数 |
+| 6 | DELETE | `/api/v1/admin/llm-configs/{config_id}` | 管理员 | 删除配置 |
 | 7 | POST | `/api/v1/admin/articles/generate-summary` | 管理员 | 生成文章摘要 |
 
 ---
@@ -83,7 +83,7 @@
 
 ## 2. 配置详情
 
-### GET /api/v1/admin/llm-configs/{id}
+### GET /api/v1/admin/llm-configs/{config_id}
 
 **成功响应**：单个 `LLMConfig` 对象
 
@@ -205,7 +205,7 @@
 
 ## 5. 更新配置
 
-### PUT /api/v1/admin/llm-configs/{id}
+### PUT /api/v1/admin/llm-configs/{config_id}
 
 **请求体**（只允许改运行参数与状态）
 
@@ -243,7 +243,7 @@
 
 ## 6. 删除配置
 
-### DELETE /api/v1/admin/llm-configs/{id}
+### DELETE /api/v1/admin/llm-configs/{config_id}
 
 **成功响应**
 
