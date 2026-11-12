@@ -2,15 +2,10 @@
 
 这个接口的响应**不使用统一响应结构**，是照抄 Go 版的既有契约：
 
-    {"status": "ok", "message": "blog-project API is running"}
+    {"status": "ok", "message": "core-coach API is running"}
 
 Docker healthcheck、CI 部署探活、Nginx upstream 检测都直接读 `status`，
 换成 `{code, message, data}` 会让这些脚本全部失效。
-
-> 文案在 v2 里改了：Go 版返回的是 `core-coach API is running`，
-> 那是项目从另一个叫 core-coach 的工程复制过来的残留（连带环境变量前缀、
-> MinIO 路径都是它的名字）。前端与运维脚本都没有引用这条文案，
-> 只读 `status` 字段，所以改掉是安全的。
 """
 
 from fastapi import APIRouter
@@ -34,6 +29,7 @@ async def health() -> JSONResponse:
         status_code=200,
         content={
             "status": "ok",
-            "message": "blog-project API is running",
+            # 文案保留 Go 版原文，不改（前端与运维脚本可能按它做匹配）
+            "message": "core-coach API is running",
         },
     )

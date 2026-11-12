@@ -366,6 +366,11 @@ def test_generate_summary(client, fake_llm):
     config_id = _create_config(client)
     fake_llm["summary"] = "摘要：这篇文章讲了一次从 Go 到 Python 的重写。"
 
+    # 记录调用前的行数：摘要接口只返回文本，不该新增或改动任何文章。
+    # 不能用 `summary LIKE '%关键字%'` 来判断 —— 库里本来就可能有内容含这个词的
+    # 文章（示例数据、别人写的文章），那种断言会随数据变化而误报。
+    before = _query(client, "SELECT COUNT(*) FROM articles", {})[0][0]
+
     resp = client.post(
         f"{API}/admin/articles/generate-summary",
         json={"config_id": config_id, "title": "重写实践", "content": "<p>正文内容</p>"},
@@ -376,9 +381,8 @@ def test_generate_summary(client, fake_llm):
     summary = resp.json()["data"]["summary"]
     assert summary == "这篇文章讲了一次从 Go 到 Python 的重写。", "前缀应当被剥掉"
 
-    # 不落库：接口只返回文本，articles 表不该因为这次调用多出任何记录
-    rows = _query(client, "SELECT COUNT(*) FROM articles WHERE summary LIKE '%重写%'", {})
-    assert rows[0][0] == 0, "摘要不该被写进 articles"
+    after = _query(client, "SELECT COUNT(*) FROM articles", {})[0][0]
+    assert after == before, "摘要不该被写进 articles"
 
 
 def test_generate_summary_disabled_config(client, fake_llm):

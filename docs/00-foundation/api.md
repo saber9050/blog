@@ -126,7 +126,7 @@ Authorization: Bearer <access_token>
 ```json
 {
   "status": "ok",
-  "message": "blog-project API is running"
+  "message": "core-coach API is running"
 }
 ```
 
