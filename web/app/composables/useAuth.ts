@@ -16,10 +16,17 @@ export function useAuth() {
   const user = useState<AuthUser | null>('auth-user', () => null)
   const token = useState<string | null>('auth-token', () => null)
 
-  // 客户端首次进入：从 localStorage 恢复会话
-  if (import.meta.client && !token.value) {
+  // 客户端：始终以 localStorage 为准
+  //
+  // 不能只在「内存里没有 token」时才读 —— useApi 在刷新失败时会清掉
+  // localStorage，而内存里的 token 还留着，路由守卫会以为还登录着，
+  // 于是一路放行、每个请求都报「登录已过期」。
+  if (import.meta.client) {
     const stored = getToken()
-    if (stored) {
+    if (!stored) {
+      token.value = null
+      user.value = null
+    } else if (!token.value) {
       token.value = stored
       user.value = readUser()
     }
