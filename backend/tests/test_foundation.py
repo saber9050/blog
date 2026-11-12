@@ -27,7 +27,7 @@ def test_health_returns_contract_shape(client):
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body == {"status": "ok", "message": "core-coach API is running"}
+    assert body == {"status": "ok", "message": "blog-project API is running"}
     # 关键：不能有 code/data 字段
     assert "code" not in body
     assert "data" not in body
