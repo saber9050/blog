@@ -70,6 +70,14 @@ export interface Taxonomy {
   name: string
 }
 
+/** 后台分类 / 标签条目，比前台多状态与创建时间。 */
+export interface AdminTaxonomy {
+  id: number
+  name: string
+  status: number
+  created_at: string
+}
+
 /** 关于页。字段名以 `docs/06-about/api.md` 为准，`git_hub` 是历史拼写。 */
 export interface About {
   admin_name: string
