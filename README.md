@@ -44,6 +44,36 @@ cp configs/config.yaml.example configs/config.yaml
 依赖的服务：MySQL 8（必需）、Redis（可选，关掉时降级为进程内缓存）、
 MinIO（可选，图片上传需要）、SMTP（可选，不配则验证码只打日志）。
 
+## 在 /docs 里自测
+
+`app.mode=debug` 时接口文档在 `http://127.0.0.1:8000/docs`，63 个接口都能点 **Try it out**。
+
+需要登录的接口按这个顺序走一遍：
+
+1. `GET /auth/image_captcha` → 拿到 `captcha_id` 和 `base_64`
+2. `base_64` 是一整串 `data:image/png;base64,...`，Swagger 只显示文本。
+   **复制整串粘到浏览器地址栏**就能看到那张 240×80 的验证码图
+3. `POST /auth/login`，填：
+
+   ```json
+   {
+     "account": "00000000000",
+     "password": "admin123456",
+     "captcha_key": "上一步的 captcha_id",
+     "captcha_code": "你看图读出来的 6 位数字"
+   }
+   ```
+
+4. 复制响应里的 `access_token`，点页面右上角 **Authorize**，粘贴进去点 Authorize。
+   之后所有带锁图标的接口都会自动带上 `Authorization`，不用逐个填
+
+两个容易踩的点：
+
+- 登录响应**不含 `refresh_token`** —— 它藏在 access_token 的 `tid` claim 里，
+  不对外暴露（防 XSS 拿到长期凭证）。`POST /auth/refresh` 要传 access_token 本体，
+  过期的也行
+- 验证码是一次性的，输错或过期都要重新取一张
+
 ## 测试与检查
 
 ```bash
