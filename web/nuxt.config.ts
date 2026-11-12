@@ -49,6 +49,20 @@ export default defineNuxtConfig({
     }
   },
 
+  /**
+   * 需要登录态的页面一律关闭 SSR。
+   *
+   * token 存在 localStorage，服务端渲染时读不到，这些页面的接口请求必然 401，
+   * 而 `useAsyncData` 拿到错误后会把 data 置空，客户端又不会重新请求 ——
+   * 结果就是一片空白。
+   *
+   * 注：页面级的 `definePageMeta({ ssr: false })` 在本版本不生效，必须走 routeRules。
+   */
+  routeRules: {
+    '/profile': { ssr: false },
+    '/admin/**': { ssr: false }
+  },
+
   compatibilityDate: '2026-06-30',
 
   /**

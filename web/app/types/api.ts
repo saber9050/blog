@@ -147,16 +147,22 @@ export interface ResetPasswordPayload {
 // 用户模块
 // ---------------------------------------------------------------
 
-/** 当前用户资料。注意 `staus` / `create_at` 是后端的历史拼写，不要改。 */
+/**
+ * 当前用户资料。
+ *
+ * ⚠️ `staus`（应为 status）和 `create_at`（应为 created_at）是后端的历史拼写，
+ * 必须照抄 —— 改名等于线上白屏。`user_id` 也不是 `id`。
+ */
 export interface UserProfile {
+  user_id: number
   user_name: string
   account: string
+  email: string
   avatar_url: string
   introduction: string
-  email: string
+  role_id: number
   staus: number
   create_at: string
-  role_id: number
 }
 
 /** 后台用户列表项。分页字段是 `pageSize`（驼峰），与其他模块不同。 */
