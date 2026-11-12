@@ -174,7 +174,9 @@ async def login(self, req: LoginRequest) -> LoginResponse:
 
 ## 接口契约约定
 
-所有接口保持与 Go 版本一致，前端零改动（除后台删 2 个 tab）。
+所有接口保持与 Go 版本一致。前端**接口层不用改**，但要删掉对话/向量相关的 6 个文件
+与 2 个后台 tab，逐文件清单见 `rewrite-plan.md` 的 7.5 节。
+前端代码本轮未动。
 
 - 响应包裹：`{"code": 0, "message": "成功", "data": {...}}`
 - `data` 为 `None` 时**不输出该字段**

@@ -11,7 +11,8 @@
 ### 1.1 一句话目标
 
 用 FastAPI 复刻现有博客后端的全部业务能力，**砍掉 AI 助手整条链路**（向量化 / 切分 / 检索 / 会话），
-只保留「对话模型」用于编辑器的一键摘要。对外接口路径、响应结构、字段名保持不变，前端只删三个后台 tab。
+只保留「对话模型」用于编辑器的一键摘要。对外接口路径、响应结构、字段名保持不变，
+前端只删两个后台 tab（切分管理、助手会话）。
 
 ### 1.2 保留 / 删除清单
 
@@ -613,12 +614,41 @@ PROMPT = """请为以下文章生成一段简洁的摘要，要求：
    （Go 原文是 ``strings.Trim(summary, `"'「」""''`)``，字符集照抄即可，别漏了直角引号）
 4. 超 255 字符截断（`summary` 列是 `varchar(255)`，不截会直接写库报错）。
 
-### 7.5 后台「AI 模型」页要动的两处
+### 7.5 前端需要动的文件（已按现有 `vue/` 代码逐文件核对）
 
-1. 新建/编辑表单删掉「模型类型」下拉，固定对话模型。
-2. 删掉「向量维度」输入框。
+后端砍掉向量与对话能力后，前端的对应实现没有接口可调，必须删；其余小改即可。
+**本轮只交付后端，前端未动**，下面是给后续做前端适配时的准确清单，不用再扫一遍代码。
 
-前端改这一处比后端删代码还麻烦，别忘排进计划。
+**删除（含配套测试）**
+
+| 文件 | 说明 |
+|---|---|
+| `src/api/chat.ts` | 441 行，对话与向量检索的全部接口 |
+| `src/utils/sse.ts` | 流式对话的 SSE 封装 |
+| `src/components/ChunkViewerPanel.vue` | 「切分管理」tab 主体 |
+| `src/components/AdminChatSessionsPanel.vue` | 「助手会话」tab 主体 |
+| `src/components/ArticleChat.vue` | 文章页的对话入口 |
+| `src/components/ChatComposer.vue` | 对话输入框 |
+| `tests/unit/chat-stream-auth.spec.ts`、`tests/unit/sse.spec.ts` | 跟着一起删，否则 vitest 找不到模块 |
+
+**修改**
+
+| 位置 | 改什么 |
+|---|---|
+| `AdminView.vue` 的 `tabs` 数组 | 8 个 tab 删 2 个（`chunks`、`chat-sessions`），剩 6 个 |
+| `AdminView.vue` 文章表格 | 删 4 列向量字段（`vector_status` / `vector_chunk_count` / `vector_error` / `vectorized_at`） |
+| `AIModelPanel.vue` | 删「类型」下拉、「向量维度」输入框、`lockedDimension` 整套校验、表格里的类型与维度两列 |
+| `vite.config.ts` | proxy target `localhost:9527` → `8000` |
+| Nginx 生产配置 | 反代 `blog-backend:9527` → `blog-backend:8000` |
+| `src/utils/editor-serialize.ts` | 它 `import type { ArticleRef } from '../api/chat'`，删 `chat.ts` 会编译失败，类型要挪到独立文件或连同 `refs` 逻辑一起删 |
+
+**不用改**：`src/api/index.ts` 的 `baseURL` 就是 `/api/v1`，与新后端路径一致；
+请求拦截器、401 刷新重试那套逻辑可直接复用。
+
+> 时间字段：后端仍返回 `2026-11-10T21:39:04Z` 这种「本地时间贴假 Z」的格式。
+> 前端 `ArticleDetailView.vue` 用 `new Date(d).toLocaleDateString()` 解析，
+> 浏览器会把 `Z` 当 UTC 再转本地时区，**结果多 8 小时，跨零点会显示成第二天**。
+> 这是 Go 版本就有的问题，不是重写引入的；修法是把 `Z` 去掉再解析，属前端自己的事。
 
 ---
 
@@ -838,7 +868,7 @@ services:
 | **P1 认证** | 注册/登录/邮箱登录/验证码/双 Token/刷新/登出 | `/auth/*` 全部 10 条 | 注册→登录→刷新→登出全流程跑通；大小写重名能被拦住 | 2.5 天 |
 | **P2 内容** | 文章 CRUD/列表筛选/详情/点赞；分类/标签/评论/关于；MinIO 上传 | 前台 + 后台内容接口 | 分页字段、时间格式、软删除、长正文不截断四项验证 | 4 天 |
 | **P3 AI 摘要 + 后台** | 模型配置 CRUD + 测试连接 + 摘要生成 | `/admin/llm-configs/*`、`/articles/generate-summary` | 真实模型生成摘要；超长正文/空正文/禁用配置三类异常正确 | 1.5 天 |
-| **P4 前端适配** | 删 2 个 tab、AI 模型页去掉类型/维度、Nginx 反代改端口 | 前端可跑通全流程 | 后台 6 个 tab 全部可操作 | 1 天 |
+| **P4 前端适配** | 删 2 个 tab 与 6 个对话/向量相关文件、AI 模型页去掉类型/维度、Nginx 反代改端口（逐文件清单见 7.5） | 前端可跑通全流程 | 后台 6 个 tab 全部可操作 | 1 天 |
 | **P5 切流上线** | 部署脚本、回滚预案、备份机制、空站验收 | 上线 | 功能回归用例全绿；空库能正常跑通全流程 | 2.5 天 |
 
 合计约 **13.5 人日**，留缓冲按 **15 人日** 排。
