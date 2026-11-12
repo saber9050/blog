@@ -1,0 +1,80 @@
+# ============================================================
+# 生产编排：只跑应用本体
+#
+# 适用场景：ECS 上已经有 MySQL / Redis / MinIO 在跑（给别的项目用），
+# 新项目复用同一套基础设施，通过「不同库名 / 不同 bucket」隔离。
+#
+# 两个 compose 文件都跑起来会抢端口，实际部署只用其中一个：
+#   docker compose up -d                     # 本地全栈
+#   docker compose -f docker-compose.prod.yml up -d   # 生产
+#
+# 与本地版的差异：
+# - 不暴露 MySQL / Redis / MinIO 端口（复用宿主机已有的）
+# - 端口只绑 127.0.0.1，由 Nginx 反代对外
+# - 日志走 json-file 限制大小，避免磁盘写满
+# ============================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: blog-v2-backend:latest
+    container_name: blog_v2_app
+    restart: unless-stopped
+    ports:
+      # 只绑本机，外部访问一律走 Nginx 反代
+      - "127.0.0.1:8000:8000"
+    environment:
+      APP__MODE: release
+      APP__HOST: 0.0.0.0
+      APP__SITE_URL: ${SITE_URL:?必须设置 SITE_URL，例如 https://zouxp.xyz}
+
+      # 连宿主机的服务。Linux 下 172.17.0.1 是 docker0 网桥地址，
+      # 容器通过它访问宿主机上监听 0.0.0.0 的服务
+      DATABASE__MYSQL__HOST: ${MYSQL_HOST:-172.17.0.1}
+      DATABASE__MYSQL__PORT: ${MYSQL_PORT:-3306}
+      DATABASE__MYSQL__USER: ${MYSQL_USER:?必须设置 MYSQL_USER}
+      DATABASE__MYSQL__PASSWORD: ${MYSQL_PASSWORD:?必须设置 MYSQL_PASSWORD}
+      DATABASE__MYSQL__DATABASE: ${MYSQL_DATABASE:-blog_v2}
+      DATABASE__MYSQL__POOL_SIZE: "5"
+      DATABASE__MYSQL__MAX_OVERFLOW: "10"
+
+      DATABASE__REDIS__ENABLED: "true"
+      DATABASE__REDIS__HOST: ${REDIS_HOST:-172.17.0.1}
+      DATABASE__REDIS__PORT: ${REDIS_PORT:-6379}
+      DATABASE__REDIS__PASSWORD: ${REDIS_PASSWORD:-}
+
+      # 生产必须配：不配则 api_key 明文入库
+      JWT__SECRET: ${JWT_SECRET:?必须设置 JWT_SECRET}
+      SECURITY__FERNET_KEY: ${FERNET_KEY:?必须设置 FERNET_KEY}
+
+      MINIO__ENDPOINT: ${MINIO_ENDPOINT:?必须设置 MINIO_ENDPOINT}
+      MINIO__ACCESS_KEY: ${MINIO_ACCESS_KEY:?必须设置 MINIO_ACCESS_KEY}
+      MINIO__SECRET_KEY: ${MINIO_SECRET_KEY:?必须设置 MINIO_SECRET_KEY}
+      MINIO__BUCKET: ${MINIO_BUCKET:-blog-v2}
+      MINIO__PUBLIC_URL: ${MINIO_PUBLIC_URL:?必须设置 MINIO_PUBLIC_URL}
+
+      SMTP__USERNAME: ${SMTP_USERNAME:-}
+      SMTP__PASSWORD: ${SMTP_PASSWORD:-}
+
+      ADMIN__ACCOUNT: ${ADMIN_ACCOUNT:-00000000000}
+      ADMIN__PASSWORD: ${ADMIN_PASSWORD:?必须设置 ADMIN_PASSWORD}
+
+      # 2 核机器 2 个 worker 够用；每个 worker 一份连接池，别贪多
+      WORKERS: ${WORKERS:-2}
+    volumes:
+      # 命名卷而非 ./logs：bind mount 在 Linux 上由 root 创建宿主目录，
+      # 容器内以 uid 1000 运行的进程写不进去（loguru 启动就抛 PermissionError）。
+      # 容器日志本身仍走 stdout，由下面的 json-file 驱动收集；
+      # 这份文件日志是给 `docker compose exec app tail` 用的。
+      - blog_v2_logs:/app/logs
+    logging:
+      driver: json-file
+      options:
+        # 不限大小的话，日志迟早把 ECS 磁盘写满
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  blog_v2_logs:

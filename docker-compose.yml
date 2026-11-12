@@ -1,0 +1,129 @@
+# ============================================================
+# 本地 / 单机全栈编排
+#
+# 包含应用与全部依赖，一条 `docker compose up -d` 就能跑起来。
+#
+# 生产环境如果已经有 MySQL / Redis / MinIO（比如共用一台 ECS），
+# 用 docker-compose.prod.yml —— 那个只跑应用本体。
+#
+# 密钥通过同目录的 `.env` 提供（compose 会自动加载，且已被 .gitignore 排除）。
+# 不建 .env 时会用下面写的默认值 —— 那些默认值只能用于本地，别带进生产。
+# ============================================================
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: blog_v2_mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+      - --max-connections=200
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-blogpass}
+      MYSQL_DATABASE: blog_v2
+      TZ: Asia/Shanghai
+    ports:
+      # 映射到 3307：宿主机 3306 通常已经被本机 MySQL 占了
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - blog_v2_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD:-blogpass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # MySQL 首次启动要初始化数据目录，20-30 秒很正常。
+      # 不给 start_period 会被判成 unhealthy 然后反复重启，表还没建完容器就死了
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: blog_v2_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - blog_v2_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: blog_v2_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - blog_v2_minio_data:/data
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blog_v2_app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      # 配置项用双下划线表示层级，覆盖镜像里那份 config.yaml
+      APP__MODE: release
+      APP__HOST: 0.0.0.0
+      APP__SITE_URL: ${SITE_URL:-http://127.0.0.1:8000}
+
+      DATABASE__MYSQL__HOST: mysql
+      DATABASE__MYSQL__PORT: "3306"
+      DATABASE__MYSQL__USER: root
+      DATABASE__MYSQL__PASSWORD: ${MYSQL_ROOT_PASSWORD:-blogpass}
+      DATABASE__MYSQL__DATABASE: blog_v2
+      DATABASE__MYSQL__POOL_SIZE: "5"
+      DATABASE__MYSQL__MAX_OVERFLOW: "10"
+
+      DATABASE__REDIS__ENABLED: "true"
+      DATABASE__REDIS__HOST: redis
+      DATABASE__REDIS__PORT: "6379"
+
+      JWT__SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production}
+      SECURITY__FERNET_KEY: ${FERNET_KEY:-}
+
+      MINIO__ENDPOINT: minio:9000
+      MINIO__ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO__SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO__BUCKET: blog-v2
+      # 浏览器访问图片的地址，必须是宿主机视角的地址（容器名在浏览器里解析不了）
+      MINIO__PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://127.0.0.1:9000}
+
+      SMTP__USERNAME: ${SMTP_USERNAME:-}
+      SMTP__PASSWORD: ${SMTP_PASSWORD:-}
+
+      ADMIN__ACCOUNT: ${ADMIN_ACCOUNT:-00000000000}
+      ADMIN__PASSWORD: ${ADMIN_PASSWORD:-admin123456}
+
+      WORKERS: ${WORKERS:-2}
+    volumes:
+      # 日志用命名卷，不要用 ./logs 这种 bind mount。
+      # bind mount 在 Linux 上由 root 创建宿主目录，容器内的 uid 1000 写不进去，
+      # loguru 会在启动阶段直接抛 PermissionError。命名卷会继承镜像里目录的属主。
+      # 想看日志：docker compose exec app tail -f /app/logs/app_$(date +%F).log
+      - blog_v2_logs:/app/logs
+
+volumes:
+  blog_v2_mysql_data:
+  blog_v2_redis_data:
+  blog_v2_minio_data:
+  blog_v2_logs:
