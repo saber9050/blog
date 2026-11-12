@@ -5,7 +5,6 @@
  * 导航做三件事就够：回首页、去归档、去关于。
  * 不放搜索框和分类下拉 —— 那些属于首页内容，塞进导航只会让顶部变重。
  */
-
 const nav = [
   { label: '文章', to: '/' },
   { label: '归档', to: '/archive' },
@@ -14,6 +13,17 @@ const nav = [
 
 const route = useRoute()
 const colorMode = useColorMode()
+const { user, isLoggedIn, isAdmin, logout } = useAuth()
+
+const menuOpen = ref(false)
+
+/** 点菜单外面要能关掉，否则它会一直挂在那儿。 */
+function onDocumentClick() {
+  menuOpen.value = false
+}
+
+onMounted(() => document.addEventListener('click', onDocumentClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
 
 function isActive(to: string) {
   return to === '/' ? route.path === '/' : route.path.startsWith(to)
@@ -21,6 +31,12 @@ function isActive(to: string) {
 
 function toggleTheme() {
   colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
+}
+
+async function handleLogout() {
+  menuOpen.value = false
+  await logout()
+  await navigateTo('/')
 }
 </script>
 
@@ -50,6 +66,67 @@ function toggleTheme() {
           >
             {{ item.label }}
           </NuxtLink>
+
+          <!-- 账号区：未登录只给一个入口，登录后收进下拉，避免顶部堆一排链接 -->
+          <NuxtLink
+            v-if="!isLoggedIn"
+            to="/login"
+            class="ml-1 rounded-md px-3 py-1.5 text-sm text-stone-500 transition-colors
+                   hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+          >
+            登录
+          </NuxtLink>
+
+          <div
+            v-else
+            class="relative ml-1"
+            @click.stop
+          >
+            <button
+              type="button"
+              class="flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-stone-600
+                     transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+              @click="menuOpen = !menuOpen"
+            >
+              {{ user?.name }}
+              <UIcon
+                name="i-lucide-chevron-down"
+                class="size-3.5"
+              />
+            </button>
+
+            <div
+              v-if="menuOpen"
+              class="absolute right-0 top-full mt-2 w-36 overflow-hidden rounded-lg border
+                     border-stone-200 bg-white py-1 shadow-sm dark:border-stone-800 dark:bg-stone-900"
+            >
+              <NuxtLink
+                to="/profile"
+                class="block px-4 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-50
+                       dark:text-stone-400 dark:hover:bg-stone-800"
+                @click="menuOpen = false"
+              >
+                个人设置
+              </NuxtLink>
+              <NuxtLink
+                v-if="isAdmin"
+                to="/admin"
+                class="block px-4 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-50
+                       dark:text-stone-400 dark:hover:bg-stone-800"
+                @click="menuOpen = false"
+              >
+                后台管理
+              </NuxtLink>
+              <button
+                type="button"
+                class="block w-full px-4 py-2 text-left text-sm text-stone-600 transition-colors
+                       hover:bg-stone-50 dark:text-stone-400 dark:hover:bg-stone-800"
+                @click="handleLogout"
+              >
+                退出
+              </button>
+            </div>
+          </div>
 
           <button
             type="button"

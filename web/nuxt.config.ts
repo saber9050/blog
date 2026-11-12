@@ -34,16 +34,6 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   /**
-   * 关闭 `@nuxt/fonts`（Nuxt UI 带进来的）。
-   *
-   * 它会扫描 CSS 里所有 font-family，再去 Google Fonts / npm 下载对应字体。
-   * 我们用的是系统字体栈，它会把 `-apple-system` 当成 npm 包去装，必然失败；
-   * Google 那几个 provider 在国内也连不通，每次启动刷一屏 502 并拖慢冷启动。
-   * 本来就只用系统字体，关掉最干净。
-   */
-  fonts: false,
-
-  /**
    * 接口地址。
    *
    * - 浏览器端用 `public.apiBase`（相对路径），走同源请求：
@@ -80,5 +70,15 @@ export default defineNuxtConfig({
         braceStyle: '1tbs'
       }
     }
-  }
+  },
+
+  /**
+   * 关闭 `@nuxt/fonts`（Nuxt UI 带进来的）。
+   *
+   * 它会扫描 CSS 里所有 font-family，再去 Google Fonts / npm 下载对应字体。
+   * 我们用的是系统字体栈，它会把 `-apple-system` 当成 npm 包去装，必然失败；
+   * Google 那几个 provider 在国内也连不通，每次启动刷一屏 502 并拖慢冷启动。
+   * 本来就只用系统字体，关掉最干净。
+   */
+  fonts: false
 })

@@ -83,3 +83,79 @@ export interface About {
   git_hub: string
   csdn: string
 }
+
+/** 图形验证码。字段名是 `base_64`（下划线），不是 `base64`。 */
+export interface ImageCaptcha {
+  captcha_id: string
+  /** 完整的 data URI，可直接塞进 `<img src>` */
+  base_64: string
+}
+
+/** 登录成功的结果。refresh token 藏在 access token 的 tid claim 里，不对外返回。 */
+export interface LoginResult {
+  user_name: string
+  user_id: number
+  /** 1 管理员 / 0 普通用户 */
+  user_role_id: number
+  access_token: string
+}
+
+/** 登录请求体。 */
+export interface LoginPayload {
+  account: string
+  password: string
+  captcha_key: string
+  captcha_code: string
+}
+
+/** 注册请求体。 */
+export interface RegisterPayload {
+  user_name: string
+  account: string
+  password: string
+  ack: string
+}
+
+/** 邮箱验证码登录请求体。 */
+export interface EmailLoginPayload {
+  email: string
+  purpose: 'login' | 'reset'
+  captcha: string
+}
+
+/** 发送邮箱验证码的用途。 */
+export type CaptchaPurpose = 'login' | 'reset'
+
+// ---------------------------------------------------------------
+// 用户模块
+// ---------------------------------------------------------------
+
+/** 当前用户资料。注意 `staus` / `create_at` 是后端的历史拼写，不要改。 */
+export interface UserProfile {
+  user_name: string
+  account: string
+  avatar_url: string
+  introduction: string
+  email: string
+  staus: number
+  create_at: string
+  role_id: number
+}
+
+/** 后台用户列表项。分页字段是 `pageSize`（驼峰），与其他模块不同。 */
+export interface AdminUserItem {
+  id: number
+  user_name: string
+  account: string
+  avatar_url: string
+  email: string
+  status: number
+  created_at: string
+}
+
+export interface AdminUserPage {
+  list: AdminUserItem[]
+  total: number
+  page: number
+  pageSize: number
+}
