@@ -38,7 +38,6 @@ const tags = ref<Taxonomy[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
-const savedMsg = ref('')
 
 const preview = ref(false)
 const generating = ref(false)
@@ -317,10 +316,18 @@ function toggleTag(tagId: number) {
   else form.tagIds.push(tagId)
 }
 
-async function save(status?: number) {
+/**
+ * 保存。
+ *
+ * 状态（草稿 / 已发布）由侧栏的下拉框决定，不再拆成「存草稿」「发布」两个按钮 ——
+ * 两个按钮加一个下拉框会让「这次保存到底存成什么」需要用户自己推理。
+ *
+ * 成功后统一回列表页：后台的心智是「改完就走」，
+ * 停在编辑页还得再点一次「← 文章」才回得去。
+ */
+async function save() {
   if (saving.value) return
   error.value = ''
-  savedMsg.value = ''
 
   if (!form.title.trim()) {
     error.value = '标题不能为空'
@@ -335,8 +342,6 @@ async function save(status?: number) {
     return
   }
 
-  if (status !== undefined) form.status = status
-
   saving.value = true
   try {
     const body = {
@@ -350,22 +355,33 @@ async function save(status?: number) {
     }
 
     if (isNew.value) {
-      const res = await api.request<{ id: number }>('/admin/articles', {
-        method: 'POST',
-        body
-      })
-      // 建完立刻切到编辑态，避免用户再点一次保存时重复创建
-      await navigateTo(`/admin/articles/${res.id}`, { replace: true })
+      await api.request('/admin/articles', { method: 'POST', body })
     } else {
       await api.request(`/admin/articles/${articleId.value}`, { method: 'PUT', body })
-      savedMsg.value = '已保存'
     }
+    await navigateTo('/admin/articles')
   } catch (err) {
     const e = err as { statusMessage?: string }
     error.value = e.statusMessage || '保存失败'
   } finally {
     saving.value = false
   }
+}
+
+/**
+ * 载入完成时的表单快照，用于「取消」时判断有没有未保存的改动。
+ * 用 JSON 字符串比较而不是逐字段比对：字段就七个，加字段时不用改这里。
+ */
+let snapshot = ''
+
+function formSnapshot() {
+  return JSON.stringify({ ...form })
+}
+
+/** 取消：回列表。有未保存改动先确认一下，避免误点丢稿。 */
+async function cancel() {
+  if (formSnapshot() !== snapshot && !confirm('有未保存的改动，确定离开？')) return
+  await navigateTo('/admin/articles')
 }
 
 async function remove() {
@@ -383,12 +399,14 @@ async function remove() {
 onMounted(async () => {
   await loadOptions()
   await loadArticle()
+  // 快照必须在分类默认值填好之后取，否则新建页一进来就算「有改动」
+  snapshot = formSnapshot()
 })
 </script>
 
 <template>
-  <div>
-    <!-- 顶栏 -->
+  <div class="admin-page-scroll">
+    <!-- 顶栏：左返回 + 标题，右保存 + 取消 -->
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <NuxtLink
@@ -404,29 +422,14 @@ onMounted(async () => {
       </div>
 
       <div class="flex items-center gap-3">
-        <span
-          v-if="savedMsg"
-          class="text-xs text-emerald-600 dark:text-emerald-500"
-        >
-          {{ savedMsg }}
-        </span>
-        <button
-          v-if="!isNew"
-          type="button"
-          class="text-xs text-stone-400 transition-colors hover:text-rose-600"
-          @click="remove"
-        >
-          删除
-        </button>
         <button
           type="button"
-          :disabled="saving"
           class="rounded-md border border-stone-200 px-3 py-1.5 text-xs text-stone-600
-                 transition-colors hover:border-stone-400 hover:text-stone-900 disabled:opacity-50
+                 transition-colors hover:border-stone-400 hover:text-stone-900
                  dark:border-stone-800 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:text-stone-100"
-          @click="save(0)"
+          @click="cancel"
         >
-          存草稿
+          取消
         </button>
         <button
           type="button"
@@ -434,9 +437,9 @@ onMounted(async () => {
           class="rounded-md bg-stone-900 px-4 py-1.5 text-xs font-medium text-white
                  transition-opacity hover:opacity-90 disabled:opacity-50
                  dark:bg-stone-100 dark:text-stone-900"
-          @click="save(1)"
+          @click="save"
         >
-          {{ saving ? '保存中…' : '发布' }}
+          {{ saving ? '保存中…' : '保存' }}
         </button>
       </div>
     </div>
@@ -717,12 +720,35 @@ onMounted(async () => {
           </p>
         </div>
 
-        <div class="rounded-md border border-stone-200 px-3 py-2 dark:border-stone-800">
-          <span class="text-[11px] text-stone-400 dark:text-stone-500">当前状态</span>
-          <p class="mt-1 text-xs text-stone-700 dark:text-stone-300">
-            {{ form.status === 1 ? '已发布' : '草稿' }}
+        <div>
+          <label class="text-xs text-stone-400 dark:text-stone-500">状态</label>
+          <select
+            v-model.number="form.status"
+            class="mt-2 w-full rounded-md border border-stone-200 bg-transparent px-3 py-2 text-xs
+                   text-stone-700 outline-none dark:border-stone-800 dark:text-stone-300"
+          >
+            <option :value="0">
+              草稿（前台不可见）
+            </option>
+            <option :value="1">
+              已发布
+            </option>
+          </select>
+          <p class="mt-1.5 text-[11px] text-stone-400 dark:text-stone-600">
+            点右上角「保存」才会生效
           </p>
         </div>
+
+        <button
+          v-if="!isNew"
+          type="button"
+          class="w-full rounded-md border border-stone-200 px-3 py-2 text-[11px] text-stone-400
+                 transition-colors hover:border-rose-200 hover:text-rose-600
+                 dark:border-stone-800 dark:text-stone-500 dark:hover:border-rose-900"
+          @click="remove"
+        >
+          删除这篇文章
+        </button>
       </aside>
     </div>
   </div>

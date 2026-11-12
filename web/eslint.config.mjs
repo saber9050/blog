@@ -24,7 +24,14 @@ export default withNuxt(
        * 与 w-full/shrink-0 组合时会算错 flex 分配）。
        */
       'better-tailwindcss/no-unknown-classes': ['error', {
-        ignore: ['editor-split', 'editor-main', 'editor-aside']
+        ignore: [
+          'editor-split',
+          'editor-main',
+          'editor-aside',
+          'admin-shell',
+          'admin-scroll',
+          'admin-page-scroll'
+        ]
       }]
     }
   }

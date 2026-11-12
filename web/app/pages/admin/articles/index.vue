@@ -13,7 +13,8 @@ definePageMeta({ middleware: 'admin', layout: 'admin' })
 const api = useApi()
 
 const page = ref(1)
-const pageSize = 10
+/** 每页条数由分页条控制，改档位时回到第 1 页（见 onPageSize） */
+const pageSize = ref(10)
 const status = ref<'' | 0 | 1>('')
 const keyword = ref('')
 const categoryId = ref<number | ''>('')
@@ -24,8 +25,6 @@ const loading = ref(false)
 const error = ref('')
 
 const categories = ref<Taxonomy[]>([])
-
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
 async function loadCategories() {
   try {
@@ -39,7 +38,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const query: Record<string, unknown> = { page: page.value, page_size: pageSize }
+    const query: Record<string, unknown> = { page: page.value, page_size: pageSize.value }
     if (status.value !== '') query.status = status.value
     if (keyword.value.trim()) query.keyword = keyword.value.trim()
     if (categoryId.value !== '') query.category_id = categoryId.value
@@ -66,6 +65,17 @@ function goPage(next: number) {
   load()
 }
 
+/**
+ * 改每页条数：页码必须归 1。
+ * 比如原来 5 条/页停在第 4 页，改成 100 条/页后总页数只剩 1，
+ * 不归 1 就会显示空列表。
+ */
+function onPageSize(size: number) {
+  pageSize.value = size
+  page.value = 1
+  load()
+}
+
 async function remove(article: Article) {
   if (!confirm(`确定删除《${article.title}》？删除后评论与图片一并清理。`)) return
   try {
@@ -86,16 +96,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="font-serif text-xl font-semibold text-stone-900 dark:text-stone-100">
-          文章
-        </h1>
-        <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
-          共 {{ total }} 篇
-        </p>
-      </div>
+  <div class="admin-shell">
+    <div class="flex shrink-0 items-center justify-between">
+      <h1 class="font-serif text-xl font-semibold text-stone-900 dark:text-stone-100">
+        文章
+      </h1>
       <NuxtLink
         to="/admin/articles/new"
         class="rounded-md bg-stone-900 px-4 py-2 text-xs font-medium text-white
@@ -106,7 +111,7 @@ onMounted(() => {
     </div>
 
     <!-- 筛选 -->
-    <div class="mt-6 flex flex-wrap items-center gap-3">
+    <div class="mt-6 flex shrink-0 flex-wrap items-center gap-3">
       <input
         v-model="keyword"
         type="text"
@@ -166,15 +171,15 @@ onMounted(() => {
 
     <p
       v-if="error"
-      class="mt-4 text-xs text-rose-600 dark:text-rose-400"
+      class="mt-4 shrink-0 text-xs text-rose-600 dark:text-rose-400"
     >
       {{ error }}
     </p>
 
-    <!-- 表格 -->
-    <div class="mt-6 overflow-hidden rounded-lg border border-stone-200 dark:border-stone-800">
+    <!-- 表格：滚动条在这一层，表头吸顶（见 main.css 的 .admin-scroll） -->
+    <div class="admin-scroll mt-6 rounded-lg border border-stone-200 dark:border-stone-800">
       <table class="w-full text-left text-xs">
-        <thead class="bg-stone-50 text-stone-500 dark:bg-stone-900 dark:text-stone-400">
+        <thead class="text-stone-500 dark:text-stone-400">
           <tr>
             <th class="px-4 py-3 font-medium">
               标题
@@ -272,29 +277,13 @@ onMounted(() => {
     </div>
 
     <!-- 分页 -->
-    <div
-      v-if="totalPages > 1"
-      class="mt-6 flex items-center justify-between text-xs"
-    >
-      <button
-        type="button"
-        :disabled="page <= 1"
-        class="text-stone-500 transition-colors hover:text-stone-900 disabled:text-stone-300
-               dark:text-stone-400 dark:hover:text-stone-100 dark:disabled:text-stone-700"
-        @click="goPage(page - 1)"
-      >
-        上一页
-      </button>
-      <span class="text-stone-400 dark:text-stone-500">{{ page }} / {{ totalPages }}</span>
-      <button
-        type="button"
-        :disabled="page >= totalPages"
-        class="text-stone-500 transition-colors hover:text-stone-900 disabled:text-stone-300
-               dark:text-stone-400 dark:hover:text-stone-100 dark:disabled:text-stone-700"
-        @click="goPage(page + 1)"
-      >
-        下一页
-      </button>
-    </div>
+    <AdminPager
+      class="mt-4"
+      :page="page"
+      :total="total"
+      :page-size="pageSize"
+      @update:page="goPage"
+      @update:page-size="onPageSize"
+    />
   </div>
 </template>

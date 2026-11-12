@@ -28,7 +28,20 @@ interface LLMConfig {
 
 const api = useApi()
 
-const list = ref<LLMConfig[]>([])
+/**
+ * 列表：接口 `/admin/llm-configs` 不分页，一次返回全部配置。
+ * 这里在前端切片做分页，只是为了和别的后台列表长得一样（每页条数可选、
+ * 列表内部滚动），不是服务端分页。
+ */
+const configs = ref<LLMConfig[]>([])
+const page = ref(1)
+const pageSize = ref(10)
+const total = computed(() => configs.value.length)
+const list = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return configs.value.slice(start, start + pageSize.value)
+})
+
 const loading = ref(false)
 const error = ref('')
 
@@ -55,13 +68,27 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    list.value = await api.request<LLMConfig[]>('/admin/llm-configs')
+    configs.value = await api.request<LLMConfig[]>('/admin/llm-configs')
+    // 删到最后一页空了，退一页（客户端分页没有服务端兜底，必须自己处理）
+    const lastPage = Math.max(1, Math.ceil(configs.value.length / pageSize.value))
+    if (page.value > lastPage) page.value = lastPage
   } catch (err) {
     const e = err as { statusMessage?: string }
     error.value = e.statusMessage || '加载失败'
   } finally {
     loading.value = false
   }
+}
+
+/** 客户端分页：切页不需要重新请求，直接改页码即可。 */
+function goPage(next: number) {
+  page.value = next
+}
+
+/** 改每页条数要回到第 1 页，否则可能落在空页上。 */
+function onPageSize(size: number) {
+  pageSize.value = size
+  page.value = 1
 }
 
 /** 测试连接：成败都返回 HTTP 200，看 data.ok。 */
@@ -127,6 +154,8 @@ async function create() {
     form.apiKey = ''
     testResult.value = null
     showForm.value = false
+    // 新建的排在最前，回第 1 页才看得见
+    page.value = 1
     await load()
   } catch (err) {
     const e = err as { statusMessage?: string }
@@ -181,14 +210,14 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
-    <div class="flex items-center justify-between">
+  <div class="admin-shell">
+    <div class="flex shrink-0 items-center justify-between">
       <div>
         <h1 class="font-serif text-xl font-semibold text-stone-900 dark:text-stone-100">
           AI 模型
         </h1>
         <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
-          用于文章摘要生成，OpenAI 兼容接口
+          用于文章摘要生成，OpenAI 兼容接口。密钥加密存库、接口只返回脱敏串，换模型请删除后重建。
         </p>
       </div>
       <button
@@ -204,7 +233,7 @@ onMounted(load)
     <!-- 新建表单 -->
     <div
       v-if="showForm"
-      class="mt-6 rounded-lg border border-stone-200 p-4 dark:border-stone-800"
+      class="mt-6 shrink-0 rounded-lg border border-stone-200 p-4 dark:border-stone-800"
     >
       <div class="grid gap-3 sm:grid-cols-2">
         <div class="sm:col-span-2">
@@ -308,15 +337,15 @@ onMounted(load)
 
     <p
       v-if="error"
-      class="mt-4 text-xs text-rose-600 dark:text-rose-400"
+      class="mt-4 shrink-0 text-xs text-rose-600 dark:text-rose-400"
     >
       {{ error }}
     </p>
 
-    <!-- 列表 -->
-    <div class="mt-6 overflow-hidden rounded-lg border border-stone-200 dark:border-stone-800">
+    <!-- 列表：滚动条在这一层，表头吸顶 -->
+    <div class="admin-scroll mt-6 rounded-lg border border-stone-200 dark:border-stone-800">
       <table class="w-full text-left text-xs">
-        <thead class="bg-stone-50 text-stone-500 dark:bg-stone-900 dark:text-stone-400">
+        <thead class="text-stone-500 dark:text-stone-400">
           <tr>
             <th class="px-4 py-2.5 font-medium">
               模型
@@ -449,8 +478,14 @@ onMounted(load)
       </table>
     </div>
 
-    <p class="mt-4 text-[11px] text-stone-400 dark:text-stone-600">
-      密钥加密存库，接口只返回脱敏串；要换模型或密钥请删除后重建。
-    </p>
+    <!-- 分页 -->
+    <AdminPager
+      class="mt-4"
+      :page="page"
+      :total="total"
+      :page-size="pageSize"
+      @update:page="goPage"
+      @update:page-size="onPageSize"
+    />
   </div>
 </template>

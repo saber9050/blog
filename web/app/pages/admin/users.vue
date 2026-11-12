@@ -15,7 +15,7 @@ definePageMeta({ middleware: 'admin', layout: 'admin' })
 const api = useApi()
 
 const page = ref(1)
-const pageSize = 10
+const pageSize = ref(10)
 const keyword = ref('')
 const status = ref<'' | 0 | 1>('')
 
@@ -34,13 +34,11 @@ const form = reactive({
   status: 1
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
-
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    const query: Record<string, unknown> = { page: page.value, page_size: pageSize }
+    const query: Record<string, unknown> = { page: page.value, page_size: pageSize.value }
     if (keyword.value.trim()) query.keyword = keyword.value.trim()
     if (status.value !== '') query.status = status.value
 
@@ -62,6 +60,13 @@ function applyFilter() {
 
 function goPage(next: number) {
   page.value = next
+  load()
+}
+
+/** 改每页条数要回到第 1 页，否则可能落在空页上。 */
+function onPageSize(size: number) {
+  pageSize.value = size
+  page.value = 1
   load()
 }
 
@@ -138,14 +143,14 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
-    <div class="flex items-center justify-between">
+  <div class="admin-shell">
+    <div class="flex shrink-0 items-center justify-between">
       <div>
         <h1 class="font-serif text-xl font-semibold text-stone-900 dark:text-stone-100">
           用户
         </h1>
         <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
-          共 {{ total }} 人（不含管理员）
+          不含管理员
         </p>
       </div>
       <button
@@ -161,7 +166,7 @@ onMounted(load)
     <!-- 新建表单 -->
     <div
       v-if="showCreate"
-      class="mt-6 rounded-lg border border-stone-200 p-4 dark:border-stone-800"
+      class="mt-6 shrink-0 rounded-lg border border-stone-200 p-4 dark:border-stone-800"
     >
       <div class="grid gap-3 sm:grid-cols-2">
         <input
@@ -230,7 +235,7 @@ onMounted(load)
     </div>
 
     <!-- 筛选 -->
-    <div class="mt-6 flex flex-wrap items-center gap-3">
+    <div class="mt-6 flex shrink-0 flex-wrap items-center gap-3">
       <input
         v-model="keyword"
         type="text"
@@ -270,15 +275,15 @@ onMounted(load)
 
     <p
       v-if="error"
-      class="mt-3 text-xs text-rose-600 dark:text-rose-400"
+      class="mt-3 shrink-0 text-xs text-rose-600 dark:text-rose-400"
     >
       {{ error }}
     </p>
 
-    <!-- 列表 -->
-    <div class="mt-6 overflow-hidden rounded-lg border border-stone-200 dark:border-stone-800">
+    <!-- 列表：滚动条在这一层，表头吸顶 -->
+    <div class="admin-scroll mt-6 rounded-lg border border-stone-200 dark:border-stone-800">
       <table class="w-full text-left text-xs">
-        <thead class="bg-stone-50 text-stone-500 dark:bg-stone-900 dark:text-stone-400">
+        <thead class="text-stone-500 dark:text-stone-400">
           <tr>
             <th class="px-4 py-2.5 font-medium">
               昵称
@@ -383,29 +388,13 @@ onMounted(load)
     </div>
 
     <!-- 分页 -->
-    <div
-      v-if="totalPages > 1"
-      class="mt-6 flex items-center justify-between text-xs"
-    >
-      <button
-        type="button"
-        :disabled="page <= 1"
-        class="text-stone-500 transition-colors hover:text-stone-900 disabled:text-stone-300
-               dark:text-stone-400 dark:hover:text-stone-100 dark:disabled:text-stone-700"
-        @click="goPage(page - 1)"
-      >
-        上一页
-      </button>
-      <span class="text-stone-400 dark:text-stone-500">{{ page }} / {{ totalPages }}</span>
-      <button
-        type="button"
-        :disabled="page >= totalPages"
-        class="text-stone-500 transition-colors hover:text-stone-900 disabled:text-stone-300
-               dark:text-stone-400 dark:hover:text-stone-100 dark:disabled:text-stone-700"
-        @click="goPage(page + 1)"
-      >
-        下一页
-      </button>
-    </div>
+    <AdminPager
+      class="mt-4"
+      :page="page"
+      :total="total"
+      :page-size="pageSize"
+      @update:page="goPage"
+      @update:page-size="onPageSize"
+    />
   </div>
 </template>

@@ -18,6 +18,9 @@ const api = useApi()
 
 const kind = ref<Kind>('categories')
 const items = ref<AdminTaxonomy[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
 const loading = ref(false)
 const error = ref('')
 
@@ -39,17 +42,29 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    // 分类/标签数量天然少，一次拉 100 条足够，不做分页
     const res = await api.request<PageResult<AdminTaxonomy>>(basePath.value, {
-      query: { page: 1, page_size: 100 }
+      query: { page: page.value, page_size: pageSize.value }
     })
     items.value = res.list
+    total.value = res.total
   } catch (err) {
     const e = err as { statusMessage?: string }
     error.value = e.statusMessage || '加载失败'
   } finally {
     loading.value = false
   }
+}
+
+function goPage(next: number) {
+  page.value = next
+  load()
+}
+
+/** 改每页条数要回到第 1 页，否则可能落在空页上。 */
+function onPageSize(size: number) {
+  pageSize.value = size
+  page.value = 1
+  load()
 }
 
 async function create() {
@@ -69,6 +84,8 @@ async function create() {
     })
     newName.value = ''
     newStatus.value = 1
+    // 新建的排在最前（后端按创建时间倒序），回第 1 页才看得见
+    page.value = 1
     await load()
   } catch (err) {
     const e = err as { statusMessage?: string }
@@ -122,6 +139,8 @@ async function remove(item: AdminTaxonomy) {
   error.value = ''
   try {
     await api.request(`${basePath.value}/${item.id}`, { method: 'DELETE' })
+    // 删完当前页最后一条时回退一页，避免停在空页
+    if (items.value.length === 1 && page.value > 1) page.value -= 1
     await load()
   } catch (err) {
     const e = err as { statusMessage?: string }
@@ -129,11 +148,12 @@ async function remove(item: AdminTaxonomy) {
   }
 }
 
-/** 切 Tab 时清掉编辑态，否则会把上一类的编辑目标带过来。 */
+/** 切 Tab 时清掉编辑态与页码，否则会把上一类的编辑目标和页码带过来。 */
 watch(kind, () => {
   editingId.value = null
   newName.value = ''
   error.value = ''
+  page.value = 1
   load()
 })
 
@@ -141,13 +161,18 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
-    <h1 class="font-serif text-xl font-semibold text-stone-900 dark:text-stone-100">
-      分类与标签
-    </h1>
+  <div class="admin-shell">
+    <div class="shrink-0">
+      <h1 class="font-serif text-xl font-semibold text-stone-900 dark:text-stone-100">
+        分类与标签
+      </h1>
+      <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
+        分类下有文章时不允许删除；标签可以删除，关联会一并清理。
+      </p>
+    </div>
 
     <!-- Tab -->
-    <div class="mt-6 flex gap-6 border-b border-stone-200 dark:border-stone-800">
+    <div class="mt-6 flex shrink-0 gap-6 border-b border-stone-200 dark:border-stone-800">
       <button
         v-for="tab in [
           { key: 'categories', label: '分类' },
@@ -166,7 +191,7 @@ onMounted(load)
     </div>
 
     <!-- 新建 -->
-    <div class="mt-6 flex items-center gap-3">
+    <div class="mt-6 flex shrink-0 items-center gap-3">
       <input
         v-model="newName"
         type="text"
@@ -204,15 +229,15 @@ onMounted(load)
 
     <p
       v-if="error"
-      class="mt-3 text-xs text-rose-600 dark:text-rose-400"
+      class="mt-3 shrink-0 text-xs text-rose-600 dark:text-rose-400"
     >
       {{ error }}
     </p>
 
-    <!-- 列表 -->
-    <div class="mt-6 overflow-hidden rounded-lg border border-stone-200 dark:border-stone-800">
+    <!-- 列表：滚动条在这一层，表头吸顶 -->
+    <div class="admin-scroll mt-6 rounded-lg border border-stone-200 dark:border-stone-800">
       <table class="w-full text-left text-xs">
-        <thead class="bg-stone-50 text-stone-500 dark:bg-stone-900 dark:text-stone-400">
+        <thead class="text-stone-500 dark:text-stone-400">
           <tr>
             <th class="px-4 py-2.5 font-medium">
               名称
@@ -341,8 +366,14 @@ onMounted(load)
       </table>
     </div>
 
-    <p class="mt-4 text-[11px] text-stone-400 dark:text-stone-600">
-      分类下有文章时不允许删除；标签可以删除，关联会一并清理。
-    </p>
+    <!-- 分页 -->
+    <AdminPager
+      class="mt-4"
+      :page="page"
+      :total="total"
+      :page-size="pageSize"
+      @update:page="goPage"
+      @update:page-size="onPageSize"
+    />
   </div>
 </template>

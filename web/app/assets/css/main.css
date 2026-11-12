@@ -124,6 +124,59 @@
 }
 
 /**
+ * 后台列表页骨架。
+ *
+ * 整页（html/body）不滚，只有列表区域滚 —— 后台布局已经是 h-screen，
+ * 页面根节点用 .admin-shell 撑满剩余高度，标题/筛选条/分页条固定，
+ * 中间列表自己滚。好处是翻页时不用先滚回页面顶部，长列表也不会
+ * 把分页条顶出可视区。
+ *
+ * 这两个类写成手写 CSS 而不是 `flex h-full min-h-0 flex-col`：
+ * min-h-0 是这个骨架的关键（不写它 flex 子项的最小高度会被内容撑开，
+ * 滚动条就不出现），写在模板里很容易被后人当成冗余删掉。
+ */
+.admin-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 列表容器本身是滚动条所在元素，同时也是圆角边框所在元素，避免双层容器 */
+.admin-shell > .admin-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/**
+ * 表头吸顶。滚动容器在 .admin-scroll 上，sticky 的 th 会跟着它滚；
+ * th 默认透明，必须显式给底色，否则行内容会从表头下面透出来。
+ */
+.admin-shell > .admin-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: var(--color-stone-50);
+  /* 用内阴影画分隔线：border 会算进盒高，滚动时表头会轻微跳动 */
+  box-shadow: inset 0 -1px 0 var(--color-stone-200);
+}
+
+.dark .admin-shell > .admin-scroll thead th {
+  background-color: var(--color-stone-900);
+  box-shadow: inset 0 -1px 0 var(--color-stone-800);
+}
+
+/**
+ * 编辑器页这类整页随内容滚动的页面，直接挂在 main 的剩余高度上。
+ */
+.admin-page-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/**
  * 编辑器双栏布局。
  *
  * 不用 `lg:flex-row` + `lg:w-64` 的组合：侧栏带 `w-full shrink-0` 时，

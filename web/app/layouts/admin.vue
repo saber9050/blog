@@ -9,6 +9,10 @@
  * 后者要求两处宽度严格一致，改一处忘另一处就会重叠。
  * grid 的列宽一处定义，两边自动对齐。
  *
+ * 高度锁在 h-screen + overflow-hidden：后台的滚动条交给页面内部的列表区
+ * （见 main.css 的 .admin-shell），整页不滚。这样翻页、筛完再翻页时，
+ * 标题和筛选条始终停在原位，不用先滚回顶部。
+ *
  * ⚠️ 列宽写成内联 style，不用 `grid-cols-[13rem_1fr]`：
  * 实测这个版本的 Tailwind 不生成任意值类（编译产物里连 13rem 都搜不到），
  * 写了等于没写，布局会塌成单列。
@@ -36,12 +40,12 @@ async function handleLogout() {
 
 <template>
   <div
-    class="grid min-h-screen bg-white dark:bg-stone-950"
+    class="grid h-screen overflow-hidden bg-white dark:bg-stone-950"
     style="grid-template-columns: 13rem 1fr"
   >
     <!-- 侧边栏：sticky 而不是 fixed，跟着 grid 走，不需要额外偏移 -->
     <aside
-      class="sticky top-0 flex h-screen flex-col overflow-y-auto border-r border-stone-200
+      class="flex h-full flex-col overflow-y-auto border-r border-stone-200
              bg-stone-50/70 dark:border-stone-800 dark:bg-stone-900/40"
     >
       <div class="px-5 py-6">
@@ -101,9 +105,9 @@ async function handleLogout() {
       </div>
     </aside>
 
-    <!-- 内容区：min-w-0 防止表格把 grid 撑破 -->
-    <div class="min-w-0">
-      <main class="mx-auto max-w-5xl px-8 py-10">
+    <!-- 内容区：min-w-0 防止表格把 grid 撑破；overflow-hidden 交给页面自己决定哪里滚 -->
+    <div class="min-w-0 overflow-hidden">
+      <main class="mx-auto flex h-full max-w-5xl flex-col px-8 py-8">
         <slot />
       </main>
     </div>

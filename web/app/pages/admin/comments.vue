@@ -23,7 +23,7 @@ interface AdminComment {
 const api = useApi()
 
 const page = ref(1)
-const pageSize = 20
+const pageSize = ref(20)
 const articleTitle = ref('')
 const userName = ref('')
 
@@ -35,7 +35,6 @@ const error = ref('')
 const selected = ref<number[]>([])
 const batchMode = ref(false)
 
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const allChecked = computed({
   get: () => list.value.length > 0 && selected.value.length === list.value.length,
   set: (value: boolean) => {
@@ -47,7 +46,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const query: Record<string, unknown> = { page: page.value, page_size: pageSize }
+    const query: Record<string, unknown> = { page: page.value, page_size: pageSize.value }
     if (articleTitle.value.trim()) query.article_title = articleTitle.value.trim()
     if (userName.value.trim()) query.user_name = userName.value.trim()
 
@@ -70,6 +69,13 @@ function applyFilter() {
 
 function goPage(next: number) {
   page.value = next
+  load()
+}
+
+/** 改每页条数要回到第 1 页，否则可能落在空页上。 */
+function onPageSize(size: number) {
+  pageSize.value = size
+  page.value = 1
   load()
 }
 
@@ -113,15 +119,12 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
-    <div class="flex items-center justify-between">
+  <div class="admin-shell">
+    <div class="flex shrink-0 items-center justify-between">
       <div>
         <h1 class="font-serif text-xl font-semibold text-stone-900 dark:text-stone-100">
           评论
         </h1>
-        <p class="mt-1 text-xs text-stone-400 dark:text-stone-500">
-          共 {{ total }} 条
-        </p>
       </div>
 
       <div class="flex items-center gap-3">
@@ -148,7 +151,7 @@ onMounted(load)
     </div>
 
     <!-- 筛选 -->
-    <div class="mt-6 flex flex-wrap items-center gap-3">
+    <div class="mt-6 flex shrink-0 flex-wrap items-center gap-3">
       <input
         v-model="articleTitle"
         type="text"
@@ -182,15 +185,15 @@ onMounted(load)
 
     <p
       v-if="error"
-      class="mt-3 text-xs text-rose-600 dark:text-rose-400"
+      class="mt-3 shrink-0 text-xs text-rose-600 dark:text-rose-400"
     >
       {{ error }}
     </p>
 
-    <!-- 列表 -->
-    <div class="mt-6 overflow-hidden rounded-lg border border-stone-200 dark:border-stone-800">
+    <!-- 列表：滚动条在这一层，表头吸顶 -->
+    <div class="admin-scroll mt-6 rounded-lg border border-stone-200 dark:border-stone-800">
       <table class="w-full text-left text-xs">
-        <thead class="bg-stone-50 text-stone-500 dark:bg-stone-900 dark:text-stone-400">
+        <thead class="text-stone-500 dark:text-stone-400">
           <tr>
             <th
               v-if="batchMode"
@@ -282,30 +285,15 @@ onMounted(load)
       </table>
     </div>
 
-    <!-- 分页 -->
-    <div
-      v-if="totalPages > 1"
-      class="mt-6 flex items-center justify-between text-xs"
-    >
-      <button
-        type="button"
-        :disabled="page <= 1"
-        class="text-stone-500 transition-colors hover:text-stone-900 disabled:text-stone-300
-               dark:text-stone-400 dark:hover:text-stone-100 dark:disabled:text-stone-700"
-        @click="goPage(page - 1)"
-      >
-        上一页
-      </button>
-      <span class="text-stone-400 dark:text-stone-500">{{ page }} / {{ totalPages }}</span>
-      <button
-        type="button"
-        :disabled="page >= totalPages"
-        class="text-stone-500 transition-colors hover:text-stone-900 disabled:text-stone-300
-               dark:text-stone-400 dark:hover:text-stone-100 dark:disabled:text-stone-700"
-        @click="goPage(page + 1)"
-      >
-        下一页
-      </button>
-    </div>
+    <!-- 分页：后台评论接口单页上限 50，所以档位只到 50 -->
+    <AdminPager
+      class="mt-4"
+      :page="page"
+      :total="total"
+      :page-size="pageSize"
+      :page-sizes="[10, 20, 50]"
+      @update:page="goPage"
+      @update:page-size="onPageSize"
+    />
   </div>
 </template>
