@@ -179,13 +179,13 @@ onMounted(() => {
             <th class="px-4 py-3 font-medium">
               标题
             </th>
-            <th class="w-20 px-4 py-3 font-medium">
+            <th class="w-24 px-4 py-3 font-medium">
               状态
             </th>
             <th class="w-24 px-4 py-3 font-medium">
               分类
             </th>
-            <th class="w-32 px-4 py-3 font-medium">
+            <th class="w-40 px-4 py-3 font-medium">
               数据
             </th>
             <th class="w-24 px-4 py-3 font-medium">
@@ -232,7 +232,7 @@ onMounted(() => {
             </td>
             <td class="px-4 py-3">
               <span
-                class="rounded-full px-2 py-0.5 text-[11px]"
+                class="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px]"
                 :class="item.status === 1
                   ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
                   : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'"
@@ -243,7 +243,7 @@ onMounted(() => {
             <td class="px-4 py-3 text-stone-500 dark:text-stone-400">
               {{ item.category?.name ?? '—' }}
             </td>
-            <td class="px-4 py-3 text-stone-400 dark:text-stone-500">
+            <td class="whitespace-nowrap px-4 py-3 text-stone-400 dark:text-stone-500">
               {{ item.views }} 阅 / {{ item.like_count }} 赞 / {{ item.comment_count }} 评
             </td>
             <td class="px-4 py-3 text-stone-400 dark:text-stone-500">

@@ -50,6 +50,197 @@ const previewHtml = computed(() => {
   return marked.parse(form.content, { async: false, gfm: true, breaks: true }) as string
 })
 
+// ---------------------------------------------------------------
+// 编辑器工具条
+// ---------------------------------------------------------------
+
+const contentRef = ref<HTMLTextAreaElement | null>(null)
+const coverInput = ref<HTMLInputElement | null>(null)
+const imageInput = ref<HTMLInputElement | null>(null)
+
+const uploadingCover = ref(false)
+const uploadingImage = ref(false)
+const uploadErr = ref('')
+
+/**
+ * 用文本替换当前选区，并把光标放到合适位置。
+ *
+ * @param replacement 替换后的完整文本
+ * @param selectFrom 相对选区起点的选中开始偏移（用于让用户接着输入）
+ * @param selectTo 选中结束偏移
+ */
+function replaceSelection(replacement: string, selectFrom?: number, selectTo?: number) {
+  const el = contentRef.value
+  if (!el) {
+    form.content += replacement
+    return
+  }
+
+  const start = el.selectionStart
+  const end = el.selectionEnd
+  form.content = form.content.slice(0, start) + replacement + form.content.slice(end)
+
+  nextTick(() => {
+    el.focus()
+    const from = start + (selectFrom ?? replacement.length)
+    const to = start + (selectTo ?? replacement.length)
+    el.setSelectionRange(from, to)
+  })
+}
+
+/**
+ * 用前后缀包住选中文本（加粗、链接等）。没有选中时插入占位词并选中它，
+ * 用户可以直接打字覆盖，不用手动删占位符。
+ */
+function wrapSelection(before: string, after: string, placeholder: string) {
+  const el = contentRef.value
+  if (!el) {
+    form.content += before + placeholder + after
+    return
+  }
+
+  const start = el.selectionStart
+  const end = el.selectionEnd
+  const selected = form.content.slice(start, end) || placeholder
+  const replacement = before + selected + after
+  form.content = form.content.slice(0, start) + replacement + form.content.slice(end)
+
+  nextTick(() => {
+    el.focus()
+    el.setSelectionRange(start + before.length, start + before.length + selected.length)
+  })
+}
+
+/** 在光标所在行的行首加前缀（标题、引用）。 */
+function prefixLine(prefix: string) {
+  const el = contentRef.value
+  if (!el) {
+    form.content += prefix
+    return
+  }
+
+  const start = el.selectionStart
+  // 找到当前行的起点
+  const lineStart = form.content.lastIndexOf('\n', start - 1) + 1
+  form.content = form.content.slice(0, lineStart) + prefix + form.content.slice(lineStart)
+
+  nextTick(() => {
+    el.focus()
+    el.setSelectionRange(start + prefix.length, start + prefix.length)
+  })
+}
+
+/**
+ * 插入代码块。选中了多行时把它们整体包进围栏，
+ * 否则插一个空围栏并把光标放在中间，直接就能敲代码。
+ */
+function insertCodeBlock() {
+  const el = contentRef.value
+  if (!el) {
+    form.content += '\n```\n\n```\n'
+    return
+  }
+
+  const start = el.selectionStart
+  const end = el.selectionEnd
+  const selected = form.content.slice(start, end)
+
+  if (selected) {
+    const replacement = '```\n' + selected + '\n```'
+    replaceSelection(replacement)
+    return
+  }
+
+  const replacement = '```\n\n```'
+  replaceSelection(replacement, 4, 4)
+}
+
+/** 上传一张图片到后端，返回完整 URL。封面与正文共用这个接口。 */
+async function uploadImage(file: File): Promise<string | null> {
+  if (file.size > 10 * 1024 * 1024) {
+    uploadErr.value = '图片不能超过 10MB'
+    return null
+  }
+
+  const body = new FormData()
+  body.append('file', file)
+  const res = await api.request<{ url: string }>('/admin/upload', { method: 'POST', body })
+  return res.url
+}
+
+/** 选择封面并上传，成功后立即预览。 */
+async function onCoverPicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  uploadErr.value = ''
+  uploadingCover.value = true
+  try {
+    const url = await uploadImage(file)
+    if (url) form.coverUrl = url
+  } catch (err) {
+    const e = err as { statusMessage?: string }
+    uploadErr.value = e.statusMessage || '封面上传失败'
+  } finally {
+    uploadingCover.value = false
+    input.value = ''
+  }
+}
+
+/** 打开封面上传选择器。 */
+function pickCover() {
+  coverInput.value?.click()
+}
+
+function removeCover() {
+  form.coverUrl = ''
+}
+
+/** 选择正文图片并插入 Markdown。 */
+async function onImagePicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  uploadErr.value = ''
+  uploadingImage.value = true
+  try {
+    const url = await uploadImage(file)
+    if (url) {
+      // 前后各留一个换行，避免图片和相邻段落粘在一起
+      const prefix = form.content && !form.content.endsWith('\n') ? '\n' : ''
+      replaceSelection(`${prefix}![](${url})\n`)
+    }
+  } catch (err) {
+    const e = err as { statusMessage?: string }
+    uploadErr.value = e.statusMessage || '图片上传失败'
+  } finally {
+    uploadingImage.value = false
+    input.value = ''
+  }
+}
+
+/** 打开正文图片选择器。 */
+function pickImage() {
+  imageInput.value?.click()
+}
+
+/**
+ * 工具条配置。
+ *
+ * 只放最常用的几个：加粗、标题、引用、链接、代码块、图片。
+ * 再多就成了半成品编辑器，不如直接写 Markdown 快。
+ */
+const toolbar = [
+  { key: 'bold', icon: 'i-lucide-bold', title: '加粗', action: () => wrapSelection('**', '**', '粗体') },
+  { key: 'heading', icon: 'i-lucide-heading-2', title: '二级标题', action: () => prefixLine('## ') },
+  { key: 'quote', icon: 'i-lucide-quote', title: '引用', action: () => prefixLine('> ') },
+  { key: 'link', icon: 'i-lucide-link', title: '链接', action: () => wrapSelection('[', '](https://)', '链接文字') },
+  { key: 'code', icon: 'i-lucide-code', title: '代码块', action: insertCodeBlock },
+  { key: 'image', icon: 'i-lucide-image', title: '插入图片', action: pickImage }
+]
+
 async function loadOptions() {
   try {
     const [cats, tgs] = await Promise.all([
@@ -286,39 +477,89 @@ onMounted(async () => {
                  dark:placeholder:text-stone-600 dark:focus:border-stone-100"
         >
 
-        <!-- 编辑 / 预览切换 -->
-        <div class="mt-6 flex items-center justify-between border-b border-stone-200 pb-2 dark:border-stone-800">
-          <div class="flex gap-4 text-xs">
-            <button
-              type="button"
-              class="transition-colors"
-              :class="!preview ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'"
-              @click="preview = false"
+        <!-- 编辑 / 预览切换 + 工具条 -->
+        <div class="mt-6 flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 pb-2 dark:border-stone-800">
+          <div class="flex items-center gap-4">
+            <div class="flex gap-4 text-xs">
+              <button
+                type="button"
+                class="transition-colors"
+                :class="!preview ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'"
+                @click="preview = false"
+              >
+                编辑
+              </button>
+              <button
+                type="button"
+                class="transition-colors"
+                :class="preview ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'"
+                @click="preview = true"
+              >
+                预览
+              </button>
+            </div>
+
+            <!-- 工具条只在编辑态出现：预览态点它没有意义 -->
+            <div
+              v-if="!preview"
+              class="flex items-center gap-0.5 border-l border-stone-200 pl-3 dark:border-stone-800"
             >
-              编辑
-            </button>
-            <button
-              type="button"
-              class="transition-colors"
-              :class="preview ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'"
-              @click="preview = true"
-            >
-              预览
-            </button>
+              <button
+                v-for="tool in toolbar"
+                :key="tool.key"
+                :data-tool="tool.key"
+                type="button"
+                class="rounded p-1.5 text-stone-400 transition-colors hover:bg-stone-100
+                       hover:text-stone-900 disabled:opacity-40 dark:hover:bg-stone-800 dark:hover:text-stone-100"
+                :title="tool.title"
+                :disabled="uploadingImage"
+                @click="tool.action()"
+              >
+                <UIcon
+                  :name="tool.icon"
+                  class="size-3.5"
+                />
+              </button>
+              <span
+                v-if="uploadingImage"
+                class="ml-1 text-[11px] text-stone-400"
+              >
+                上传中…
+              </span>
+            </div>
           </div>
+
           <span class="text-[11px] text-stone-300 dark:text-stone-600">
             {{ form.content.length }} 字符
           </span>
         </div>
 
+        <!-- 正文图片的隐藏选择器 -->
+        <input
+          id="body-image-input"
+          ref="imageInput"
+          type="file"
+          accept=".jpg,.jpeg,.png,.webp"
+          class="hidden"
+          @change="onImagePicked"
+        >
+
+        <p
+          v-if="uploadErr"
+          class="mt-2 text-xs text-rose-600 dark:text-rose-400"
+        >
+          {{ uploadErr }}
+        </p>
+
+        <!-- 高度给足：写长文时编辑区太矮会不停滚动 -->
         <textarea
           v-if="!preview"
+          ref="contentRef"
           v-model="form.content"
-          rows="26"
-          placeholder="用 Markdown 写正文…"
-          class="mt-4 w-full resize-y rounded-md border border-stone-200 bg-transparent p-4
-                 font-mono text-[13px] leading-relaxed text-stone-800 outline-none
-                 transition-colors placeholder:text-stone-300 focus:border-stone-400
+          placeholder="用 Markdown 写正文…（工具条可插入图片与代码块）"
+          class="mt-4 h-[60vh] min-h-[420px] w-full resize-y rounded-md border border-stone-200
+                 bg-transparent p-4 font-mono text-[13px] leading-relaxed text-stone-800
+                 outline-none transition-colors placeholder:text-stone-300 focus:border-stone-400
                  dark:border-stone-800 dark:text-stone-200 dark:placeholder:text-stone-600
                  dark:focus:border-stone-600"
         />
@@ -413,16 +654,67 @@ onMounted(async () => {
         </div>
 
         <div>
-          <label class="text-xs text-stone-400 dark:text-stone-500">封面 URL</label>
-          <input
-            v-model="form.coverUrl"
-            type="url"
-            placeholder="https://…"
-            class="mt-2 w-full rounded-md border border-stone-200 bg-transparent px-3 py-2 text-xs
-                   text-stone-700 outline-none transition-colors placeholder:text-stone-300
-                   focus:border-stone-400 dark:border-stone-800 dark:text-stone-300
-                   dark:placeholder:text-stone-600 dark:focus:border-stone-600"
+          <label class="text-xs text-stone-400 dark:text-stone-500">封面</label>
+
+          <!-- 有封面就显示预览，并把「更换 / 移除」放图下面 -->
+          <div
+            v-if="form.coverUrl"
+            class="mt-2 overflow-hidden rounded-md border border-stone-200 dark:border-stone-800"
           >
+            <img
+              :src="form.coverUrl"
+              alt="封面"
+              class="block w-full object-cover"
+            >
+            <div class="flex items-center justify-between border-t border-stone-100 px-2 py-1.5 dark:border-stone-800">
+              <button
+                type="button"
+                class="text-[11px] text-stone-500 transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+                :disabled="uploadingCover"
+                @click="pickCover"
+              >
+                {{ uploadingCover ? '上传中…' : '更换' }}
+              </button>
+              <button
+                type="button"
+                class="text-[11px] text-stone-400 transition-colors hover:text-rose-600 dark:text-stone-500"
+                @click="removeCover"
+              >
+                移除
+              </button>
+            </div>
+          </div>
+
+          <button
+            v-else
+            type="button"
+            class="mt-2 flex w-full flex-col items-center justify-center gap-1.5 rounded-md
+                   border border-dashed border-stone-200 py-7 text-[11px] text-stone-400
+                   transition-colors hover:border-stone-400 hover:text-stone-600
+                   disabled:opacity-60 dark:border-stone-800 dark:hover:border-stone-600
+                   dark:hover:text-stone-300"
+            :disabled="uploadingCover"
+            @click="pickCover"
+          >
+            <UIcon
+              name="i-lucide-image-plus"
+              class="size-4"
+            />
+            {{ uploadingCover ? '上传中…' : '上传封面' }}
+          </button>
+
+          <input
+            id="cover-input"
+            ref="coverInput"
+            type="file"
+            accept=".jpg,.jpeg,.png,.webp"
+            class="hidden"
+            @change="onCoverPicked"
+          >
+
+          <p class="mt-1.5 text-[11px] text-stone-400 dark:text-stone-600">
+            jpg / png / webp，不超过 10MB
+          </p>
         </div>
 
         <div class="rounded-md border border-stone-200 px-3 py-2 dark:border-stone-800">
