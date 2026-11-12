@@ -116,15 +116,32 @@ export interface RegisterPayload {
   ack: string
 }
 
+/**
+ * 邮箱验证码的用途。四个值互不相通：不同 purpose 各存一个 Redis key，
+ * 但**发送频率限制跨 purpose 共享**（同一邮箱 60 秒只能发一次）。
+ */
+export type CaptchaPurpose = 'login' | 'reset_password' | 'reset_email' | 'add_email'
+
 /** 邮箱验证码登录请求体。 */
 export interface EmailLoginPayload {
   email: string
-  purpose: 'login' | 'reset'
+  purpose: 'login'
   captcha: string
 }
 
-/** 发送邮箱验证码的用途。 */
-export type CaptchaPurpose = 'login' | 'reset'
+/** 发送邮箱验证码。 */
+export interface SendCaptchaPayload {
+  email: string
+  purpose: CaptchaPurpose
+}
+
+/** 用邮箱验证码重置密码。 */
+export interface ResetPasswordPayload {
+  email: string
+  captcha: string
+  new_password: string
+  ack: string
+}
 
 // ---------------------------------------------------------------
 // 用户模块
