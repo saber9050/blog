@@ -8,7 +8,7 @@
  * 高级感主要来自排版纪律，不是颜色数量 —— 所以整站只有一个强调色（近黑），
  * 其余全靠灰阶层次。
  */
-@theme static {
+@theme {
   /*
    * 全用系统字体，不拉 Web Font。
    *
@@ -120,5 +120,43 @@
 
   .article-body hr {
     @apply my-12 border-stone-200 dark:border-stone-800;
+  }
+}
+
+/**
+ * 编辑器双栏布局。
+ *
+ * 不用 `lg:flex-row` + `lg:w-64` 的组合：侧栏带 `w-full shrink-0` 时，
+ * 在某些宽度下 flex 会先按 100% 分配侧栏宽度，主区（flex-1，basis 0）
+ * 被压成一条竖缝 —— 这是 flex 的分配顺序问题，不是断点没生效。
+ *
+ * 换成原生媒体查询 + 显式子元素宽度，行为可预测，也不用猜 Tailwind 的排序。
+ */
+.editor-split {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.editor-split > .editor-main {
+  min-width: 0;
+}
+
+.editor-split > .editor-aside {
+  width: 100%;
+}
+
+@media (min-width: 64rem) {
+  .editor-split {
+    flex-direction: row;
+  }
+
+  .editor-split > .editor-main {
+    flex: 1;
+  }
+
+  .editor-split > .editor-aside {
+    width: 16rem;
+    flex-shrink: 0;
   }
 }
