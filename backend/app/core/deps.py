@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from fastapi import Depends, Header, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -313,6 +314,24 @@ class CurrentUser:
         return self.role_id == 1
 
 
+# ---------------------------------------------------------------
+# Bearer 鉴权的 OpenAPI 声明
+# ---------------------------------------------------------------
+# 我们的 token 解析是自己写的（`_extract_bearer`），为了让 Swagger UI 能画出一个
+# 「全局 Authorize」按钮，这里额外挂一个 HTTPBearer 依赖。
+#
+# 不加的话，FastAPI 会把 `Authorization` 当成普通 header 参数塞进每个接口的
+# 参数列表：能用，但每测一个接口都要重新粘一遍 `Bearer xxx`，且容易漏掉前缀。
+#
+# auto_error=False 是关键：缺 token 时返回 None 而不是抛 403，
+# 这样未登录的 401 文案仍由业务代码决定，与文档契约一致。
+_bearer_scheme = HTTPBearer(
+    auto_error=False,
+    scheme_name="BearerAuth",
+    description="登录接口返回的 access_token，直接粘贴，不用自己加 Bearer 前缀",
+)
+
+
 def _extract_bearer(authorization: str | None) -> str:
     """从请求头里取出 Bearer token。
 
@@ -335,13 +354,24 @@ def _extract_bearer(authorization: str | None) -> str:
 
 async def get_current_user(
     request: Request,
-    authorization: str | None = Header(default=None, alias="Authorization"),
+    authorization: str | None = Header(
+        default=None, alias="Authorization", include_in_schema=False
+    ),
+    _scheme: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> CurrentUser:
     """解析当前登录用户，未登录抛 401。
+
+    `_scheme` 参数本身不用，它存在**只是为了在 OpenAPI 里声明 Bearer 鉴权** ——
+    有了它，Swagger UI 右上角才会出现 Authorize 按钮，token 填一次全局生效；
+    否则每个受保护接口都要单独手写一遍 `Bearer xxx`。
+
+    `auto_error=False` 保证缺 token 时这里拿到 `None` 而不是 FastAPI 默认的 403，
+    真正的校验与文案仍由 `_extract_bearer` 负责，保持 401「请提供认证令牌」的契约。
 
     Args:
         request: 用于取 `app.state.jwt`。
         authorization: 请求头，由 FastAPI 注入。
+        _scheme: 仅用于生成 OpenAPI 的 securityScheme，运行时值不使用。
 
     Returns:
         当前用户信息。
@@ -362,7 +392,9 @@ async def get_current_user(
 
 async def get_optional_user(
     request: Request,
-    authorization: str | None = Header(default=None, alias="Authorization"),
+    authorization: str | None = Header(
+        default=None, alias="Authorization", include_in_schema=False
+    ),
 ) -> CurrentUser | None:
     """可选登录。
 
