@@ -41,6 +41,37 @@ cp configs/config.yaml.example configs/config.yaml
 - 健康检查 `http://127.0.0.1:8000/api/v1/health`
 - 默认管理员 `00000000000` / `admin123456`（首次启动自动创建，**登录后立刻改**）
 
+### 启动命令怎么读
+
+```
+.venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
+└──────── 解释器 ────────┘ └─ 模块 ─┘ └ 入口 ┘
+```
+
+`app.main:app` 是「模块路径 **:** 变量名」，uvicorn 实际在做 `from app.main import app`：
+
+| 片段 | 指向 |
+|---|---|
+| `app` | `backend/app/` 这个 Python 包 |
+| `main` | `app/main.py` |
+| `:app` | 文件末尾的 `app = create_app()` |
+
+常用参数：
+
+| 参数 | 说明 |
+|---|---|
+| `--reload` | 改代码自动重启，只用于开发 |
+| `--host 0.0.0.0` | 允许局域网访问（默认 `127.0.0.1` 只有本机） |
+| `--workers 2` | 多进程，生产用；**与 `--reload` 互斥** |
+| `--log-level warning` | 只看结果不打过程日志 |
+
+> `config.yaml` 里的 `app.host` / `app.port` **不控制监听地址**，只用于打印 banner
+> 和文档链接。真正监听哪里由命令行决定，两处不一致时以命令行为准。
+>
+> 顺带：`fastapi dev` 这条命令在本项目用不了 —— `pyproject.toml` 只装了 `fastapi`
+> 核心包，没装 `fastapi[standard]`（`fastapi-cli` 在后者里）。且 `dev` 是子命令，
+> 写成 `fastapi run dev` 是错的，`run` 后面跟的是入口点。
+
 依赖的服务：MySQL 8（必需）、Redis（可选，关掉时降级为进程内缓存）、
 MinIO（可选，图片上传需要）、SMTP（可选，不配则验证码只打日志）。
 
