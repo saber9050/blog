@@ -38,7 +38,10 @@ coverage.xml
 *.key
 
 # 真实配置文件（含数据库密码、密钥）。只提交 config.yaml.example
-configs/config.yaml
+#
+# 必须写 `**/`：Git 的忽略规则里，带斜杠的模式是**相对于 .gitignore 所在目录**的，
+# 单个 `configs/config.yaml` 只匹配仓库根目录那一份，匹配不到 backend/configs/ 下的。
+**/configs/config.yaml
 
 # ============================================================
 # IDE

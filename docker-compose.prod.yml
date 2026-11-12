@@ -17,7 +17,8 @@
 services:
   app:
     build:
-      context: .
+      # 后端代码在 backend/，构建上下文与 .dockerignore 都在那一层
+      context: ./backend
       dockerfile: Dockerfile
     image: blog-v2-backend:latest
     container_name: blog_v2_app

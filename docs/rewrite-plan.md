@@ -109,49 +109,95 @@
 
 ## 4. 目标工程结构
 
+**单仓库、前后端并列**。后端与前端各自独立构建、独立部署，共用一份文档与编排文件。
+
 ```
 blog/
-├── app/
-│   ├── main.py                  # create_app() + lifespan
-│   ├── core/
-│   │   ├── config.py            # pydantic-settings，读 configs/config.yaml
-│   │   ├── logging.py           # loguru 配置
-│   │   ├── errors.py            # 错误码表 + BizError
-│   │   ├── response.py          # ApiResponse / PageMeta / ok() / fail()
-│   │   ├── security.py          # bcrypt + JWT 签发解析 + refresh 存储
-│   │   └── deps.py              # get_db / get_redis / current_user / admin_required
-│   ├── db/
-│   │   ├── session.py           # async engine + sessionmaker
-│   │   ├── base.py              # DeclarativeBase + 命名约定 + 时间戳 mixin
-│   │   └── models/              # 一表一文件，10 个
-│   ├── schemas/                 # Pydantic 请求/响应，按模块拆
-│   ├── repositories/            # 纯 SQL，无业务判断
-│   ├── services/                # 业务逻辑
-│   ├── api/v1/
-│   │   ├── auth.py  users.py  articles.py  comments.py
-│   │   ├── categories.py  tags.py  about.py  health.py
-│   │   └── admin/
-│   │       ├── users.py  articles.py  comments.py
-│   │       ├── categories.py  tags.py  llm_configs.py
-│   ├── integrations/
-│   │   ├── llm.py               # OpenAI 兼容 /chat/completions（唯一模型入口）
-│   │   ├── minio_client.py
-│   │   ├── mailer.py
-│   │   └── captcha.py
-│   └── utils/
-├── alembic/
-│   ├── env.py                   # async engine
-│   └── versions/
-├── tests/
-│   ├── conftest.py
-│   ├── test_auth.py  test_articles.py  ...
-│   └── integration/             # 接真 PG
-├── docs/rewrite-plan.md         # 本文件
-├── pyproject.toml
-├── configs/config.yaml.example
-├── Dockerfile
-└── docker-compose.yml
+├── backend/                          # 后端（Python / FastAPI）
+│   ├── app/
+│   │   ├── main.py                   # create_app() + lifespan
+│   │   ├── core/
+│   │   │   ├── config.py             # pydantic-settings，读 configs/config.yaml
+│   │   │   ├── logging.py            # loguru 配置
+│   │   │   ├── errors.py             # 错误码表 + BizError
+│   │   │   ├── response.py           # ApiResponse / PageMeta / ok() / fail()
+│   │   │   ├── security.py           # bcrypt + JWT + Fernet
+│   │   │   ├── protocols.py          # 跨模块契约（Protocol）
+│   │   │   ├── pages.py              # 浏览器落地页（邮件确认结果）
+│   │   │   ├── timefmt.py            # 时间序列化格式
+│   │   │   └── deps.py               # FastAPI 依赖装配
+│   │   ├── db/
+│   │   │   ├── base.py               # Base / 命名约定 / 时间戳 / 软删除 mixin
+│   │   │   ├── database.py           # Database 类：engine + sessionmaker
+│   │   │   └── models/               # 一表一文件，7 个模块文件覆盖 10 张表
+│   │   ├── middleware/
+│   │   │   ├── exception.py          # 全局异常兜底
+│   │   │   └── request_log.py
+│   │   ├── api/v1/
+│   │   │   ├── auth.py  user.py  article.py  comment.py
+│   │   │   ├── taxonomy.py  about.py  health.py
+│   │   │   └── admin/
+│   │   │       ├── users.py  article.py  comment.py
+│   │   │       └── taxonomy.py  llm.py
+│   │   ├── schemas/                  # Pydantic 请求/响应，按模块拆
+│   │   ├── repositories/             # 纯 SQL，无业务判断
+│   │   │   ├── auth_repository.py  user_repository.py
+│   │   │   ├── article_repository.py  comment_repository.py
+│   │   │   ├── about_repository.py  llm_config_repository.py
+│   │   │   └── taxonomy/             # 泛型基类 + 分类/标签子类
+│   │   ├── services/                 # 业务逻辑 + 事务边界
+│   │   │   ├── auth/                 # auth_service / auth_cache / captcha / mailer
+│   │   │   ├── user/  article/  taxonomy/
+│   │   │   ├── comment_service.py  about_service.py
+│   │   │   ├── llm_service.py  bootstrap.py
+│   │   └── integrations/
+│   │       ├── redis_client.py       # Redis 封装 + 内存降级
+│   │       ├── minio_storage.py
+│   │       └── llm_client.py         # OpenAI 兼容 /chat/completions
+│   ├── alembic/
+│   │   ├── env.py                    # async engine + compare_type 回调
+│   │   └── versions/
+│   ├── tests/                        # 172 条，真连 MySQL / Redis / MinIO
+│   ├── scripts/check_api_contract.py # 文档 vs 路由的契约校对
+│   ├── configs/
+│   │   ├── config.yaml               # 真实配置（不入库）
+│   │   └── config.yaml.example
+│   ├── pyproject.toml
+│   ├── alembic.ini
+│   ├── Dockerfile
+│   └── .dockerignore
+├── web/                              # 前端（新建，待开发）
+├── docs/                             # 前后端共用文档
+│   ├── README.md                     # 索引与设计决策
+│   ├── rewrite-plan.md               # 本文件
+│   ├── deploy.md
+│   └── 00-foundation … 07-llm/       # 各模块 api.md + design.md
+├── docker-compose.yml                # 本地全栈（含 mysql / redis / minio）
+├── docker-compose.prod.yml           # 生产：只跑 backend 镜像
+├── .github/workflows/ci.yml          # 后端静态检查 + 迁移 + 测试 + 镜像构建
+├── .gitignore
+└── README.md                         # 项目总览与启动方式
 ```
+
+**为什么这么分**：
+
+1. **`backend/` 与 `web/` 平级**：两边构建命令、依赖、产物完全不同，混在一层会让
+   根目录堆满 `node_modules` 与 `.venv` 两套垃圾，也说不清 `python` 该在哪儿跑。
+2. **`docs/` 放根目录**：接口契约是前后端共同的真相，放 `backend/` 下会让前端
+   每次查接口都要进后端目录，语义也不对。
+3. **`docker-compose*.yml` 放根目录**：它编排的是整个项目（frontend 未来也可能进 compose），
+   且 `build.context` 显式指向 `./backend`，不依赖 cwd。
+4. **`Dockerfile` 留在 `backend/`**：镜像只关心后端，`context: ./backend` 时
+   `.dockerignore` 也跟着在那一层生效，规则更简单。
+
+**路径敏感点**（改结构时最容易漏的四处）：
+
+| 位置 | 处理 |
+|---|---|
+| `docker-compose*.yml` | `build.context: ./backend` |
+| `.github/workflows/ci.yml` | `defaults.run.working-directory: backend`，`cache-dependency-path: backend/pyproject.toml` |
+| `scripts/check_api_contract.py` | docs 路径按 `Path(__file__).parents[2]` 推导，不依赖 cwd |
+| `alembic.ini` | `script_location = alembic` 是相对 backend 的，不需要改 |
 
 分层规则（对应 Go 的 `api → service → repository`）：
 

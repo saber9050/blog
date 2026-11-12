@@ -202,11 +202,13 @@ async def login(self, req: LoginRequest) -> LoginResponse:
 ### 校验契约是否漂移
 
 ```bash
+cd backend
 python scripts/check_api_contract.py
 ```
 
 从各模块 `api.md` 的表格里抽接口，与 FastAPI 实际注册的路由逐条比对。
 完全一致时退出码 0，有差异时返回 1（可直接挂进 CI）。
+docs 目录按脚本位置推导，从仓库根目录执行也能工作。
 
 它**只校路径与方法**，字段级契约靠 `tests/` 里的用例守着 ——
 那些用例断言了 `staus` / `create_at` / `pageSize` / `git_hub` 这类历史拼写。

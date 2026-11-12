@@ -1,6 +1,6 @@
 """接口契约校对：文档 vs 实际注册。
 
-用法：
+用法（在 `backend/` 下）：
 
     python scripts/check_api_contract.py
 
@@ -14,10 +14,10 @@
 历史拼写，路由级别的脚本管不到。
 """
 
-import glob
 import os
 import re
 import sys
+from pathlib import Path
 
 # 必须在 import app.* 之前设置：
 # `app/main.py` 末尾有模块级的 `app = create_app()`，import 的那一刻就会
@@ -30,6 +30,10 @@ os.environ["APP__MODE"] = "release"
 # 文档表格里的接口行：| 1 | GET | `/api/v1/xxx` | 可选 | 说明 |
 _DOC_ROW = re.compile(r"\|\s*\d*\s*\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*`([^`]+)`\s*\|")
 
+# docs 在仓库根目录（backend 的上一级）。不能写相对 cwd 的 "docs/*/api.md"：
+# 从 backend/ 跑、从仓库根跑、在 CI 里跑，cwd 各不相同，只有按脚本位置推导才稳。
+_DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
+
 
 def collect_from_docs() -> dict[tuple[str, str], str]:
     """从各模块 `api.md` 的表格里抽接口。
@@ -38,9 +42,9 @@ def collect_from_docs() -> dict[tuple[str, str], str]:
         `{(path, method): 模块名}`。
     """
     found: dict[tuple[str, str], str] = {}
-    for path in sorted(glob.glob("docs/*/api.md")):
-        module = os.path.basename(os.path.dirname(path))
-        text = open(path, encoding="utf-8").read()
+    for path in sorted(_DOCS_DIR.glob("*/api.md")):
+        module = path.parent.name
+        text = path.read_text(encoding="utf-8")
         for method, api_path in _DOC_ROW.findall(text):
             if "/api/v1" in api_path:
                 found[(api_path, method)] = module
