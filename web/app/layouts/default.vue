@@ -67,66 +67,78 @@ async function handleLogout() {
             {{ item.label }}
           </NuxtLink>
 
-          <!-- 账号区：未登录只给一个入口，登录后收进下拉，避免顶部堆一排链接 -->
-          <NuxtLink
-            v-if="!isLoggedIn"
-            to="/login"
-            class="ml-1 rounded-md px-3 py-1.5 text-sm text-stone-500 transition-colors
-                   hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-          >
-            登录
-          </NuxtLink>
+          <!--
+            账号区必须包在 ClientOnly 里：token 存在 localStorage，服务端渲染时
+            读不到，会渲染成「登录」，而客户端 hydration 后立刻变成用户名 ——
+            两边不一致，Vue 会报 Hydration mismatch。
+            fallback 给一个等宽占位，避免内容加载完布局跳一下。
+          -->
+          <ClientOnly>
+            <template #fallback>
+              <span class="ml-1 inline-block h-8 w-14" />
+            </template>
 
-          <div
-            v-else
-            class="relative ml-1"
-            @click.stop
-          >
-            <button
-              type="button"
-              class="flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-stone-600
-                     transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-              @click="menuOpen = !menuOpen"
+            <!-- 账号区：未登录只给一个入口，登录后收进下拉，避免顶部堆一排链接 -->
+            <NuxtLink
+              v-if="!isLoggedIn"
+              to="/login"
+              class="ml-1 rounded-md px-3 py-1.5 text-sm text-stone-500 transition-colors
+                     hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
             >
-              {{ user?.name }}
-              <UIcon
-                name="i-lucide-chevron-down"
-                class="size-3.5"
-              />
-            </button>
+              登录
+            </NuxtLink>
 
             <div
-              v-if="menuOpen"
-              class="absolute right-0 top-full mt-2 w-36 overflow-hidden rounded-lg border
-                     border-stone-200 bg-white py-1 shadow-sm dark:border-stone-800 dark:bg-stone-900"
+              v-else
+              class="relative ml-1"
+              @click.stop
             >
-              <NuxtLink
-                to="/profile"
-                class="block px-4 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-50
-                       dark:text-stone-400 dark:hover:bg-stone-800"
-                @click="menuOpen = false"
-              >
-                个人设置
-              </NuxtLink>
-              <NuxtLink
-                v-if="isAdmin"
-                to="/admin"
-                class="block px-4 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-50
-                       dark:text-stone-400 dark:hover:bg-stone-800"
-                @click="menuOpen = false"
-              >
-                后台管理
-              </NuxtLink>
               <button
                 type="button"
-                class="block w-full px-4 py-2 text-left text-sm text-stone-600 transition-colors
-                       hover:bg-stone-50 dark:text-stone-400 dark:hover:bg-stone-800"
-                @click="handleLogout"
+                class="flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-stone-600
+                       transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+                @click="menuOpen = !menuOpen"
               >
-                退出
+                {{ user?.name }}
+                <UIcon
+                  name="i-lucide-chevron-down"
+                  class="size-3.5"
+                />
               </button>
+
+              <div
+                v-if="menuOpen"
+                class="absolute right-0 top-full mt-2 w-36 overflow-hidden rounded-lg border
+                       border-stone-200 bg-white py-1 shadow-sm dark:border-stone-800 dark:bg-stone-900"
+              >
+                <NuxtLink
+                  to="/profile"
+                  class="block px-4 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-50
+                         dark:text-stone-400 dark:hover:bg-stone-800"
+                  @click="menuOpen = false"
+                >
+                  个人设置
+                </NuxtLink>
+                <NuxtLink
+                  v-if="isAdmin"
+                  to="/admin"
+                  class="block px-4 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-50
+                         dark:text-stone-400 dark:hover:bg-stone-800"
+                  @click="menuOpen = false"
+                >
+                  后台管理
+                </NuxtLink>
+                <button
+                  type="button"
+                  class="block w-full px-4 py-2 text-left text-sm text-stone-600 transition-colors
+                         hover:bg-stone-50 dark:text-stone-400 dark:hover:bg-stone-800"
+                  @click="handleLogout"
+                >
+                  退出
+                </button>
+              </div>
             </div>
-          </div>
+          </ClientOnly>
 
           <button
             type="button"

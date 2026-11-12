@@ -1,20 +1,17 @@
 /**
- * 时间格式化。
+ * 把后端时间字符串转成 Date。
  *
- * ⚠️ 后端返回的时间形如 `2026-11-01T10:00:00Z`，但**这个 Z 是硬贴上去的**：
- * 数据库里存的是东八区本地时间，序列化时直接拼了个字面量 Z。
+ * 后端有两种格式，必须分开处理：
  *
- * 如果直接 `new Date("2026-11-01T10:00:00Z")`，浏览器会按 UTC 解析，
- * 再转成本地时区，结果**多出 8 小时**，23 点后的文章会显示成第二天。
+ * 1. 文章类：`2026-11-01T10:00:00Z` —— 这个 Z 是**字面量**，库里存的是东八区
+ *    本地时间。直接 new Date 会按 UTC 解析，凭空多出 8 小时。
+ * 2. 评论类：`2026-11-09T21:39:04.123456+08:00` —— 带真实时区偏移，可以直接解析。
  *
- * 所以这里先去掉 Z 再解析，按本地时间处理。
+ * 判断依据是结尾有没有 `Z`：带偏移量的串不会以 Z 结尾。
  */
-
-/** 把后端的伪 UTC 字符串转成 Date（按本地时间理解）。 */
 export function parseApiTime(value: string | null | undefined): Date | null {
   if (!value) return null
-  // 去掉结尾的 Z，让 Date 按本地时区解析
-  const normalized = value.replace(/Z$/, '')
+  const normalized = value.endsWith('Z') ? value.replace(/Z$/, '') : value
   const date = new Date(normalized)
   return Number.isNaN(date.getTime()) ? null : date
 }

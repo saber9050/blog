@@ -176,3 +176,35 @@ export interface AdminUserPage {
   page: number
   pageSize: number
 }
+
+// ---------------------------------------------------------------
+// 评论模块
+// ---------------------------------------------------------------
+
+/**
+ * 评论。
+ *
+ * 时间格式与其他模块不同：这里是 `2026-11-09T21:39:04.123456+08:00`（带时区偏移），
+ * 不是文章那种假的 `Z`。所以可以直接 `new Date()` 解析。
+ */
+export interface Comment {
+  id: number
+  content: string
+  user_id: number
+  user_name: string
+  avatar_url: string
+  parent_id: number | null
+  /** 回复目标昵称的快照，被回复的人改名后这里不变 */
+  reply_to_name: string
+  is_deleted: boolean
+  created_at: string
+  /** 仅一级评论有意义；二级恒为 0 */
+  children_total: number
+}
+
+/** 发表评论的请求体。 */
+export interface CreateCommentPayload {
+  content: string
+  parent_id?: number
+  reply_to_name?: string
+}
