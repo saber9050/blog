@@ -8,6 +8,7 @@ Go 版就是这么做的，`GetFileURL` / `ParseFileKey` 两个方法的语义�
 """
 
 import io
+import json
 from functools import partial
 
 from anyio import to_thread
@@ -43,7 +44,7 @@ class MinioStorage:
         )
 
     async def ensure_bucket(self) -> bool:
-        """确保 bucket 存在，不存在则创建。
+        """确保 bucket 存在，不存在则创建，并保证图片可被匿名读取。
 
         启动时调用一次。失败只打警告不阻断启动：
         图片功能不可用，但登录、文章、评论照常。
@@ -57,6 +58,8 @@ class MinioStorage:
             if not exists:
                 await to_thread.run_sync(partial(self._client.make_bucket, self._bucket))
                 logger.info("MinIO bucket 已创建：{}", self._bucket)
+
+            await self._ensure_public_read()
             return True
         except S3Error as exc:
             # 服务端连上了但拒绝了请求（权限、bucket 名非法等）
@@ -70,6 +73,34 @@ class MinioStorage:
                 exc,
             )
             return False
+
+    async def _ensure_public_read(self) -> None:
+        """把 bucket 设成「所有人可读、只有凭证持有者能写」。
+
+        不做这一步的话，接口返回的图片地址在浏览器里是 403 ——
+        对象默认私有，匿名 GET 会被拒。文章图片和头像都要求能直接用
+        `<img src>` 展示，没有公开读就等于上传完看不见。
+
+        幂等：每次启动重设一遍策略，本地重建 bucket 后不会漏掉。
+        失败只警告，不影响其他功能。
+        """
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{self._bucket}/*"],
+                }
+            ],
+        }
+        try:
+            await to_thread.run_sync(
+                partial(self._client.set_bucket_policy, self._bucket, json.dumps(policy))
+            )
+        except Exception as exc:  # noqa: BLE001 - 策略设置失败不该阻断启动
+            logger.warning("MinIO bucket 公开读策略设置失败（图片可能无法展示）：{}", exc)
 
     # ---------- SupportsFileStorage 实现 ----------
 
