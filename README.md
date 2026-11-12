@@ -41,69 +41,8 @@ cp configs/config.yaml.example configs/config.yaml
 - 健康检查 `http://127.0.0.1:8000/api/v1/health`
 - 默认管理员 `00000000000` / `admin123456`（首次启动自动创建，**登录后立刻改**）
 
-### 启动命令怎么读
-
-```
-.venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
-└──────── 解释器 ────────┘ └─ 模块 ─┘ └ 入口 ┘
-```
-
-`app.main:app` 是「模块路径 **:** 变量名」，uvicorn 实际在做 `from app.main import app`：
-
-| 片段 | 指向 |
-|---|---|
-| `app` | `backend/app/` 这个 Python 包 |
-| `main` | `app/main.py` |
-| `:app` | 文件末尾的 `app = create_app()` |
-
-常用参数：
-
-| 参数 | 说明 |
-|---|---|
-| `--reload` | 改代码自动重启，只用于开发 |
-| `--host 0.0.0.0` | 允许局域网访问（默认 `127.0.0.1` 只有本机） |
-| `--workers 2` | 多进程，生产用；**与 `--reload` 互斥** |
-| `--log-level warning` | 只看结果不打过程日志 |
-
-> `config.yaml` 里的 `app.host` / `app.port` **不控制监听地址**，只用于打印 banner
-> 和文档链接。真正监听哪里由命令行决定，两处不一致时以命令行为准。
->
-> 顺带：`fastapi dev` 这条命令在本项目用不了 —— `pyproject.toml` 只装了 `fastapi`
-> 核心包，没装 `fastapi[standard]`（`fastapi-cli` 在后者里）。且 `dev` 是子命令，
-> 写成 `fastapi run dev` 是错的，`run` 后面跟的是入口点。
-
 依赖的服务：MySQL 8（必需）、Redis（可选，关掉时降级为进程内缓存）、
 MinIO（可选，图片上传需要）、SMTP（可选，不配则验证码只打日志）。
-
-## 在 /docs 里自测
-
-`app.mode=debug` 时接口文档在 `http://127.0.0.1:8000/docs`，63 个接口都能点 **Try it out**。
-
-需要登录的接口按这个顺序走一遍：
-
-1. `GET /auth/image_captcha` → 拿到 `captcha_id` 和 `base_64`
-2. `base_64` 是一整串 `data:image/png;base64,...`，Swagger 只显示文本。
-   **复制整串粘到浏览器地址栏**就能看到那张 240×80 的验证码图
-3. `POST /auth/login`，填：
-
-   ```json
-   {
-     "account": "00000000000",
-     "password": "admin123456",
-     "captcha_key": "上一步的 captcha_id",
-     "captcha_code": "你看图读出来的 6 位数字"
-   }
-   ```
-
-4. 复制响应里的 `access_token`，点页面右上角 **Authorize**，粘贴进去点 Authorize。
-   之后所有带锁图标的接口都会自动带上 `Authorization`，不用逐个填
-
-两个容易踩的点：
-
-- 登录响应**不含 `refresh_token`** —— 它藏在 access_token 的 `tid` claim 里，
-  不对外暴露（防 XSS 拿到长期凭证）。`POST /auth/refresh` 要传 access_token 本体，
-  过期的也行
-- 验证码是一次性的，输错或过期都要重新取一张
 
 ## 测试与检查
 
@@ -116,6 +55,20 @@ cd backend
 
 测试**不是 mock 数据库的**：SQL 写错、索引漏建、软删除过滤错这类问题，
 只有真连库才暴露得出来。
+
+## 快速启动（前端）
+
+```bash
+cd web
+pnpm install
+pnpm dev          # http://localhost:3000
+```
+
+开发服务器的 `/api` 会转发到 `127.0.0.1:8000`，所以先起后端。
+
+需要 Node 20+（本机默认是 14，要先 `nvm use 22`）。
+
+技术栈与页面清单见 [web/README.md](web/README.md)。
 
 ## 容器化
 
