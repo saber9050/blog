@@ -12,7 +12,25 @@
           → 探活 MySQL / Redis / MinIO（失败只警告，不阻断）
       → lifespan.shutdown
           → 释放连接池
+
+三种启动方式都支持：
+
+    python app/main.py            # 本文件末尾的 __main__ 块，PyCharm 右键运行也走这条
+    fastapi dev app/main.py       # 开发：热重载 + /docs
+    uvicorn app.main:app --port 8000   # 生产（容器里就是这么起的）
 """
+
+# ruff: noqa: E402 —— 下面的 sys.path 引导必须在业务 import 之前执行，
+# 否则 `python app/main.py` 会报 ModuleNotFoundError: No module named 'app'
+import sys
+from pathlib import Path
+
+# 用脚本方式运行本文件时，sys.path[0] 是 app/ 而不是 backend/，
+# `import app.core.config` 找不到包。这里把 backend/ 补进搜索路径。
+# 用 uvicorn / fastapi dev 启动时这段是空操作，不会产生副作用。
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+if str(_BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_ROOT))
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -250,3 +268,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 # uvicorn app.main:app 的入口
 app = create_app()
+
+
+if __name__ == "__main__":
+    """
+    直接 `python app/main.py` 的启动入口。
+
+    **不写这块的话，进程会「启动成功然后立刻退出」**：模块顶层只做了一次
+    create_app()（装配了对象、打了日志），既没有 uvicorn.run，
+    也没有任何阻塞调用，解释器执行完就正常结束 —— 退出码 0，
+    看起来像「启动成功」，其实端口一次都没监听。
+
+    这里传 app 对象而不是 "app.main:app" 字符串：字符串形式会再 import 一次
+    本模块，等于把应用装配两遍（banner 也会打两次），而热重载在
+    `python xxx.py` 这种模式下本来就不可靠 —— 需要热重载请用
+    `fastapi dev app/main.py`。
+    """
+    import uvicorn
+
+    _settings = get_settings()
+    logger.info("uvicorn 启动：http://{}:{}", _settings.app.host, _settings.app.port)
+    uvicorn.run(app, host=_settings.app.host, port=_settings.app.port)

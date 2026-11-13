@@ -31,9 +31,14 @@ cp configs/config.yaml.example configs/config.yaml
 # 3. 建表
 .venv/Scripts/python.exe -m alembic upgrade head
 
-# 4. 起服务
+# 4. 起服务（三选一）
 .venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
+.venv/Scripts/python.exe app/main.py          # 直接跑入口，PyCharm 右键 Run 也行
+.venv/Scripts/python.exe -m fastapi dev app/main.py
 ```
+
+> 从哪个目录启动都行：配置文件和日志目录都按 `backend/` 解析，不看当前工作目录。
+> 配置没找到时会往 stderr 打一行醒目提示，不会静默用默认值。
 
 启动后：
 

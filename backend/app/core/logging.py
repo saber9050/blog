@@ -15,7 +15,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from app.core.config import Settings
+from app.core.config import BACKEND_ROOT, Settings
 
 # 控制台格式：时间 | 级别 | 模块:行号 | 消息
 _CONSOLE_FORMAT = (
@@ -62,7 +62,12 @@ class LoggingConfigurator:
         )
 
         # ---- 文件 ----
+        # 相对路径一律按 backend/ 解析，不跟着「当前工作目录」走。
+        # 否则从项目根启动日志会落在 blog/logs/，从 backend/ 启动落在 backend/logs/，
+        # 排查问题时翻错文件。想换位置就在配置里写绝对路径。
         log_dir = Path(settings.log.dir)
+        if not log_dir.is_absolute():
+            log_dir = BACKEND_ROOT / log_dir
         log_dir.mkdir(parents=True, exist_ok=True)
         logger.add(
             log_dir / "app_{time:YYYY-MM-DD}.log",

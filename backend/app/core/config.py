@@ -17,6 +17,7 @@ YAML 按 `app` / `database` / `jwt` / `minio` 分组，与 Go 版的 `config.yam
 """
 
 import os
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -30,8 +31,32 @@ from pydantic_settings import (
     YamlConfigSettingsSource,
 )
 
-# 配置文件路径。容器里用 CONFIG_FILE 环境变量指到挂载点。
-CONFIG_FILE = Path(os.getenv("CONFIG_FILE", "configs/config.yaml"))
+# backend/ 根目录：本文件在 app/core/config.py，往上三层
+BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# 配置文件路径。
+#
+# **必须基于 __file__ 算绝对路径，不能用相对路径**。相对路径跟着「当前工作目录」
+# 走，而工作目录取决于谁启动的进程：
+#   - PyCharm 默认把工作目录设成项目根（blog/），于是 configs/config.yaml 找不到
+#   - 命令行在 backend/ 下启动才碰巧能对上
+# 找不到时 pydantic-settings 不报错，直接回退到本文件的默认值 ——
+# 症状是「我明明配了 debug，怎么起来是 release」「MinIO 地址怎么变成 127.0.0.1 了」。
+#
+# 容器里用 CONFIG_FILE 环境变量指到挂载点，优先级最高。
+CONFIG_FILE = Path(
+    os.getenv("CONFIG_FILE", str(BACKEND_ROOT / "configs" / "config.yaml"))
+).resolve()
+
+if not CONFIG_FILE.is_file():
+    # 这里只能 print：日志系统由 LoggingConfigurator 初始化，而它依赖本对象，
+    # 此刻还没配置好。用 stderr 保证不会被 stdout 的缓冲吞掉。
+    print(
+        f"[config] 配置文件不存在：{CONFIG_FILE}\n"
+        f"[config] 将使用代码内置默认值（mode=release / 本地地址），"
+        f"配置里的库密码、MinIO 地址都不会生效。",
+        file=sys.stderr,
+    )
 
 
 # ============================================================
