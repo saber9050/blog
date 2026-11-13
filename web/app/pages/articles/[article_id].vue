@@ -125,12 +125,11 @@ if (!article.value && error.value) {
         <span>{{ article.views }} 次阅读</span>
       </div>
 
-      <img
-        v-if="article.cover_url"
-        :src="article.cover_url"
-        :alt="article.title"
-        class="mt-8 w-full rounded-lg object-cover"
-      >
+      <!--
+        封面不在这里显示：它是列表页用来「一眼区分文章」的缩略图，
+        详情页有大标题和正文，再摆一张大图只会把正文推到首屏之外。
+        但 og:image 仍用 cover_url —— 分享到社交平台时那张图是必要的。
+      -->
     </header>
 
     <!--

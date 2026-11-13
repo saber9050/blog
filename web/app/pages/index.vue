@@ -51,11 +51,14 @@ useSeoMeta({
       <div
         v-for="i in 3"
         :key="i"
-        class="space-y-3"
+        class="flex items-start gap-5 sm:gap-6"
       >
-        <USkeleton class="h-7 w-2/3" />
-        <USkeleton class="h-4 w-full" />
-        <USkeleton class="h-3 w-1/4" />
+        <div class="min-w-0 flex-1 space-y-3">
+          <USkeleton class="h-7 w-2/3" />
+          <USkeleton class="h-4 w-full" />
+          <USkeleton class="h-3 w-1/4" />
+        </div>
+        <USkeleton class="aspect-[4/3] w-20 shrink-0 rounded-md sm:w-40" />
       </div>
     </div>
 
@@ -94,37 +97,59 @@ useSeoMeta({
           :to="`/articles/${item.id}`"
           class="block"
         >
-          <div class="flex items-baseline gap-3">
-            <span class="font-mono text-xs text-stone-400 dark:text-stone-500">
-              {{ String(index + 1 + (page - 1) * PAGE_SIZE).padStart(2, '0') }}
-            </span>
-            <h2
-              class="font-serif text-xl leading-snug font-semibold text-stone-900 transition-colors
-                     group-hover:text-stone-600 sm:text-2xl dark:text-stone-100 dark:group-hover:text-stone-300"
+          <!-- 文字在左、封面缩略图在右：不打断「序号 + 标题」这条竖向轴 -->
+          <div class="flex items-start gap-5 sm:gap-6">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-baseline gap-3">
+                <span class="font-mono text-xs text-stone-400 dark:text-stone-500">
+                  {{ String(index + 1 + (page - 1) * PAGE_SIZE).padStart(2, '0') }}
+                </span>
+                <h2
+                  class="font-serif text-xl leading-snug font-semibold text-stone-900 transition-colors
+                         group-hover:text-stone-600 sm:text-2xl dark:text-stone-100 dark:group-hover:text-stone-300"
+                >
+                  {{ item.title }}
+                </h2>
+              </div>
+
+              <p
+                v-if="item.summary"
+                class="mt-3 line-clamp-2 pl-7 text-[0.95rem] leading-relaxed text-stone-500 dark:text-stone-400"
+              >
+                {{ item.summary }}
+              </p>
+
+              <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 pl-7 text-xs text-stone-400 dark:text-stone-500">
+                <time>{{ formatDateShort(item.created_at) }}</time>
+                <template v-if="item.category">
+                  <span class="text-stone-300 dark:text-stone-700">/</span>
+                  <span>{{ item.category.name }}</span>
+                </template>
+                <span class="text-stone-300 dark:text-stone-700">/</span>
+                <span>{{ item.views }} 次阅读</span>
+                <template v-if="item.comment_count > 0">
+                  <span class="text-stone-300 dark:text-stone-700">/</span>
+                  <span>{{ item.comment_count }} 条评论</span>
+                </template>
+              </div>
+            </div>
+
+            <!--
+              封面：有才占位，没封面时文字直接用满宽度 —— 不做灰底占位框，
+              一堆空框会把这张纸变成表格。
+              固定 4:3 裁切（object-cover），不同尺寸的原图在列表里高度一致。
+            -->
+            <div
+              v-if="item.cover_url"
+              class="w-20 shrink-0 overflow-hidden rounded-md bg-stone-100 sm:w-40 dark:bg-stone-900"
             >
-              {{ item.title }}
-            </h2>
-          </div>
-
-          <p
-            v-if="item.summary"
-            class="mt-3 line-clamp-2 pl-7 text-[0.95rem] leading-relaxed text-stone-500 dark:text-stone-400"
-          >
-            {{ item.summary }}
-          </p>
-
-          <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 pl-7 text-xs text-stone-400 dark:text-stone-500">
-            <time>{{ formatDateShort(item.created_at) }}</time>
-            <template v-if="item.category">
-              <span class="text-stone-300 dark:text-stone-700">/</span>
-              <span>{{ item.category.name }}</span>
-            </template>
-            <span class="text-stone-300 dark:text-stone-700">/</span>
-            <span>{{ item.views }} 次阅读</span>
-            <template v-if="item.comment_count > 0">
-              <span class="text-stone-300 dark:text-stone-700">/</span>
-              <span>{{ item.comment_count }} 条评论</span>
-            </template>
+              <img
+                :src="item.cover_url"
+                :alt="item.title"
+                loading="lazy"
+                class="aspect-[4/3] w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              >
+            </div>
           </div>
         </NuxtLink>
       </article>
