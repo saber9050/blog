@@ -15,6 +15,7 @@ const props = defineProps<{ articleId: number }>()
 
 const api = useApi()
 const { isLoggedIn, isAdmin, user } = useAuth()
+const { confirm } = useConfirm()
 
 const comments = ref<Comment[]>([])
 const total = ref(0)
@@ -146,7 +147,13 @@ async function submit() {
 }
 
 async function remove(comment: Comment) {
-  if (!confirm('确定删除这条评论？')) return
+  const ok = await confirm({
+    title: '删除这条评论？',
+    description: '删除后不可恢复，它下面的回复会保留。',
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
   try {
     await api.request(`/articles/${props.articleId}/comments/${comment.id}`, { method: 'DELETE' })
     // 回复缓存作废：清空后再次展开会重新请求

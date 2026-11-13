@@ -18,6 +18,7 @@ definePageMeta({ middleware: 'admin', layout: 'admin' })
 
 const route = useRoute()
 const api = useApi()
+const { confirm } = useConfirm()
 
 const articleId = computed(() => String(route.params.id))
 const isNew = computed(() => articleId.value === 'new')
@@ -380,13 +381,28 @@ function formSnapshot() {
 
 /** 取消：回列表。有未保存改动先确认一下，避免误点丢稿。 */
 async function cancel() {
-  if (formSnapshot() !== snapshot && !confirm('有未保存的改动，确定离开？')) return
+  if (formSnapshot() !== snapshot) {
+    const ok = await confirm({
+      title: '放弃未保存的修改？',
+      description: '离开后这次编辑的内容不会保留。',
+      confirmText: '离开',
+      cancelText: '继续编辑',
+      danger: true
+    })
+    if (!ok) return
+  }
   await navigateTo('/admin/articles')
 }
 
 async function remove() {
   if (isNew.value) return
-  if (!confirm('确定删除这篇文章？评论与图片会一并清理，不可恢复。')) return
+  const ok = await confirm({
+    title: '删除这篇文章？',
+    description: `《${form.title || '未命名'}》的评论与图片会一并清理，不可恢复。`,
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
   try {
     await api.request(`/admin/articles/${articleId.value}`, { method: 'DELETE' })
     await navigateTo('/admin/articles')

@@ -21,6 +21,7 @@ interface AdminComment {
 }
 
 const api = useApi()
+const { confirm } = useConfirm()
 
 const page = ref(1)
 const pageSize = ref(20)
@@ -86,7 +87,13 @@ function toggle(id: number) {
 }
 
 async function removeOne(comment: AdminComment) {
-  if (!confirm(`删除「${comment.user_name}」的这条评论？`)) return
+  const ok = await confirm({
+    title: '删除这条评论？',
+    description: `「${comment.user_name}」的评论及其下的回复会一起删除。`,
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
   try {
     await api.request(`/admin/comments/${comment.id}`, { method: 'DELETE' })
     if (list.value.length === 1 && page.value > 1) page.value -= 1
@@ -99,7 +106,13 @@ async function removeOne(comment: AdminComment) {
 
 async function removeSelected() {
   if (selected.value.length === 0) return
-  if (!confirm(`删除选中的 ${selected.value.length} 条评论？`)) return
+  const ok = await confirm({
+    title: `删除选中的 ${selected.value.length} 条评论？`,
+    description: '每条评论下的回复会一并删除，不可恢复。',
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
 
   try {
     const res = await api.request<{ count: number }>('/admin/comments', {

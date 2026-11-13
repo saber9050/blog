@@ -101,11 +101,18 @@ class AdminUpdateUserRequest(BaseModel):
 
 
 class AdminUserItem(BaseModel):
-    """后台列表里的一行。"""
+    """后台列表里的一行。
+
+    `account` 与 `email` 是后台才有的字段：搜索框支持按账号模糊匹配，
+    列表里却不显示账号的话，搜出来的结果没法核对是谁。
+    前台任何接口都不会返回这两个字段。
+    """
 
     id: int
     user_name: str
+    account: str
     avatar_url: str
+    email: str
     status: int
     created_at: str
 

@@ -11,6 +11,7 @@ import type { Article, PageResult, Taxonomy } from '~/types/api'
 definePageMeta({ middleware: 'admin', layout: 'admin' })
 
 const api = useApi()
+const { confirm } = useConfirm()
 
 const page = ref(1)
 /** 每页条数由分页条控制，改档位时回到第 1 页（见 onPageSize） */
@@ -77,7 +78,13 @@ function onPageSize(size: number) {
 }
 
 async function remove(article: Article) {
-  if (!confirm(`确定删除《${article.title}》？删除后评论与图片一并清理。`)) return
+  const ok = await confirm({
+    title: '删除这篇文章？',
+    description: `《${article.title}》的评论与图片会一并清理，不可恢复。`,
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
   try {
     await api.request(`/admin/articles/${article.id}`, { method: 'DELETE' })
     // 删完当前页最后一条时回退一页，避免停在空页

@@ -13,6 +13,7 @@ import type { AdminUserItem, AdminUserPage } from '~/types/api'
 definePageMeta({ middleware: 'admin', layout: 'admin' })
 
 const api = useApi()
+const { confirm } = useConfirm()
 
 const page = ref(1)
 const pageSize = ref(10)
@@ -128,7 +129,13 @@ async function toggleStatus(user: AdminUserItem) {
 }
 
 async function remove(user: AdminUserItem) {
-  if (!confirm(`删除用户「${user.user_name}」？这是软删除，数据仍在库里。`)) return
+  const ok = await confirm({
+    title: `删除用户「${user.user_name}」？`,
+    description: '这是软删除：账号无法再登录，但评论等历史数据仍留在库里。',
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
   try {
     await api.request(`/admin/users/${user.id}`, { method: 'DELETE' })
     if (list.value.length === 1 && page.value > 1) page.value -= 1
@@ -352,8 +359,9 @@ onMounted(load)
               {{ user.email || '—' }}
             </td>
             <td class="px-4 py-2.5">
+              <!-- whitespace-nowrap：不加的话「已禁用」会在窄列里折成两行 -->
               <span
-                class="rounded-full px-2 py-0.5 text-[11px]"
+                class="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px]"
                 :class="user.status === 1
                   ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
                   : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'"

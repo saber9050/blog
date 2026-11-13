@@ -355,7 +355,10 @@ class UserService:
             AdminUserItem(
                 id=u.id,
                 user_name=u.user_name,
+                account=u.account,
                 avatar_url=self._storage.public_url(u.avatar_url or ""),
+                # 未绑邮箱时返回空串，前端显示「—」，不要返回 null
+                email=u.email or "",
                 status=u.status,
                 created_at=format_time_z(u.created_at),
             )

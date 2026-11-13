@@ -27,6 +27,7 @@ interface LLMConfig {
 }
 
 const api = useApi()
+const { confirm } = useConfirm()
 
 /**
  * 列表：接口 `/admin/llm-configs` 不分页，一次返回全部配置。
@@ -194,7 +195,13 @@ async function saveEdit(config: LLMConfig) {
 }
 
 async function remove(config: LLMConfig) {
-  if (!confirm(`删除配置「${config.model}」？删除后引用它的摘要功能会不可用。`)) return
+  const ok = await confirm({
+    title: `删除配置「${config.model}」？`,
+    description: '删除后文章摘要生成会失去这个可用模型；已发布的文章不受影响。',
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
   try {
     await api.request(`/admin/llm-configs/${config.id}`, { method: 'DELETE' })
     await load()
@@ -356,10 +363,10 @@ onMounted(load)
             <th class="w-32 px-4 py-2.5 font-medium">
               密钥
             </th>
-            <th class="w-40 px-4 py-2.5 font-medium">
-              参数
+            <th class="w-52 px-4 py-2.5 font-medium">
+              运行参数
             </th>
-            <th class="w-20 px-4 py-2.5 font-medium">
+            <th class="w-24 px-4 py-2.5 font-medium">
               状态
             </th>
             <th class="w-28 px-4 py-2.5 font-medium">
@@ -398,34 +405,82 @@ onMounted(load)
             <td class="px-4 py-2.5 font-mono text-stone-400 dark:text-stone-500">
               {{ config.api_key_masked }}
             </td>
+            <!--
+              参数列：编辑时每个输入框前面带标签，光三个数字框没人知道哪个是哪个。
+              值是「超时 / 上限 / 温度」，对应 config.yaml 里的
+              timeout_sec / max_tokens / temperature。
+            -->
             <td class="px-4 py-2.5 text-stone-400 dark:text-stone-500">
-              <template v-if="editingId === config.id">
-                <div class="flex flex-col gap-1">
+              <div
+                v-if="editingId === config.id"
+                class="flex flex-col gap-1.5"
+              >
+                <label class="flex items-center gap-2">
+                  <span class="w-11 shrink-0 text-[11px] text-stone-500 dark:text-stone-400">超时</span>
                   <input
                     v-model.number="edit.timeoutSec"
                     type="number"
-                    class="w-20 rounded border border-stone-300 px-1 py-0.5 text-[11px] dark:border-stone-700 dark:bg-transparent"
+                    min="1"
+                    class="w-14 rounded border border-stone-300 px-1 py-0.5 text-[11px]
+                           dark:border-stone-700 dark:bg-transparent"
                   >
+                  <span class="text-[11px]">秒</span>
+                </label>
+                <label class="flex items-center gap-2">
+                  <span class="w-11 shrink-0 text-[11px] text-stone-500 dark:text-stone-400">上限</span>
                   <input
                     v-model.number="edit.maxTokens"
                     type="number"
-                    class="w-24 rounded border border-stone-300 px-1 py-0.5 text-[11px] dark:border-stone-700 dark:bg-transparent"
+                    min="1"
+                    class="w-14 rounded border border-stone-300 px-1 py-0.5 text-[11px]
+                           dark:border-stone-700 dark:bg-transparent"
                   >
+                  <span class="text-[11px]">token</span>
+                </label>
+                <label class="flex items-center gap-2">
+                  <span class="w-11 shrink-0 text-[11px] text-stone-500 dark:text-stone-400">温度</span>
                   <input
                     v-model.number="edit.temperature"
                     type="number"
+                    min="0"
+                    max="2"
                     step="0.1"
-                    class="w-20 rounded border border-stone-300 px-1 py-0.5 text-[11px] dark:border-stone-700 dark:bg-transparent"
+                    class="w-14 rounded border border-stone-300 px-1 py-0.5 text-[11px]
+                           dark:border-stone-700 dark:bg-transparent"
                   >
-                </div>
-              </template>
-              <template v-else>
-                {{ config.timeout_sec }}s / {{ config.max_tokens }} tok / T={{ config.temperature }}
-              </template>
+                  <span class="text-[11px]">0–2</span>
+                </label>
+              </div>
+
+              <!-- 展示态同样带字段名，别只给「30s / 2048 / 0.3」 -->
+              <div
+                v-else
+                class="space-y-0.5 text-[11px] leading-relaxed"
+              >
+                <div>超时 {{ config.timeout_sec }} 秒</div>
+                <div>上限 {{ config.max_tokens }} token</div>
+                <div>温度 {{ config.temperature }}</div>
+              </div>
             </td>
+
+            <!-- 状态在编辑态可以改：禁用只是「不参与摘要生成」，不是删除 -->
             <td class="px-4 py-2.5">
+              <select
+                v-if="editingId === config.id"
+                v-model.number="edit.status"
+                class="rounded border border-stone-300 bg-transparent px-1 py-0.5 pr-5 text-[11px]
+                       text-stone-600 outline-none dark:border-stone-700 dark:text-stone-300"
+              >
+                <option :value="1">
+                  启用
+                </option>
+                <option :value="0">
+                  禁用
+                </option>
+              </select>
               <span
-                class="rounded-full px-2 py-0.5 text-[11px]"
+                v-else
+                class="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px]"
                 :class="config.status === 1
                   ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
                   : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'"
@@ -487,5 +542,36 @@ onMounted(load)
       @update:page="goPage"
       @update:page-size="onPageSize"
     />
+
+    <!--
+      参数说明常驻在列表下方：编辑时才解释太晚，而这三个词本身不自明。
+      措辞用「调大 / 调小」这种可操作的表述，不抄厂商文档的抽象定义。
+    -->
+    <dl class="mt-3 grid shrink-0 gap-x-6 gap-y-1 text-[11px] leading-relaxed text-stone-400 sm:grid-cols-3 dark:text-stone-500">
+      <div>
+        <dt class="inline text-stone-600 dark:text-stone-300">
+          超时
+        </dt>
+        <dd class="inline">
+          单次请求最多等多久。走代理或网络慢就调大，默认 30 秒。
+        </dd>
+      </div>
+      <div>
+        <dt class="inline text-stone-600 dark:text-stone-300">
+          上限
+        </dt>
+        <dd class="inline">
+          生成摘要的最大长度（token）。中文摘要三四百字用 1024 就够，2048 更保险。
+        </dd>
+      </div>
+      <div>
+        <dt class="inline text-stone-600 dark:text-stone-300">
+          温度
+        </dt>
+        <dd class="inline">
+          0–2，越低越稳定。摘要用 0.2–0.4；调到 1 以上容易跑偏、胡说。
+        </dd>
+      </div>
+    </dl>
   </div>
 </template>

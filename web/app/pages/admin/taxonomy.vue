@@ -15,6 +15,7 @@ definePageMeta({ middleware: 'admin', layout: 'admin' })
 type Kind = 'categories' | 'tags'
 
 const api = useApi()
+const { confirm } = useConfirm()
 
 const kind = ref<Kind>('categories')
 const items = ref<AdminTaxonomy[]>([])
@@ -131,10 +132,16 @@ async function saveEdit(item: AdminTaxonomy) {
 }
 
 async function remove(item: AdminTaxonomy) {
-  const tip = kind.value === 'categories'
-    ? `删除分类「${item.name}」？分类下还有文章时会被拒绝。`
-    : `删除标签「${item.name}」？会同时解除它与所有文章的关联。`
-  if (!confirm(tip)) return
+  const isCategory = kind.value === 'categories'
+  const ok = await confirm({
+    title: `删除${isCategory ? '分类' : '标签'}「${item.name}」？`,
+    description: isCategory
+      ? '分类下还有文章时会被拒绝，需要先把文章移到别的分类。'
+      : '会同时解除它与所有文章的关联，文章本身不受影响。',
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
 
   error.value = ''
   try {
