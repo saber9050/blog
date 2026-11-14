@@ -49,6 +49,15 @@ cp configs/config.yaml.example configs/config.yaml
 依赖的服务：MySQL 8（必需）、Redis（可选，关掉时降级为进程内缓存）、
 MinIO（可选，图片上传需要）、SMTP（可选，不配则验证码只打日志）。
 
+调试或写自动化脚本需要 token 时，**不要调登录接口** —— 本项目是单设备登录，
+`refresh:{user_id}` 只有一个 key，任何一次新登录都会覆盖它，把正在用的浏览器顶下线。
+用这个脚本复用当前会话签 token，不发登录请求：
+
+```bash
+.venv/Scripts/python.exe scripts/mint_token.py              # 正常 token
+.venv/Scripts/python.exe scripts/mint_token.py --expired    # 已过期，用来验证刷新链路
+```
+
 ## 测试与检查
 
 ```bash
