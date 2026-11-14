@@ -37,6 +37,32 @@ watch(
   { immediate: true }
 )
 
+// ---- 区块的「展示 / 编辑」开关 ----
+//
+// 个人中心的主职责是「看」，不是「改」：默认把资料当只读文本展示，
+// 点各区块右上角的按钮才展开表单。这样页面不会一进来就是一堆输入框，
+// 也顺手避免了「手滑改了昵称还不知道自己改了」。
+const editingProfile = ref(false)
+const editingEmail = ref(false)
+const editingPwd = ref(false)
+
+/** 进入资料编辑：用当前值填充输入框，并清掉上一轮的提示。 */
+function startEditProfile() {
+  nickName.value = profile.value?.user_name ?? ''
+  introduction.value = profile.value?.introduction ?? ''
+  profileMsg.value = ''
+  profileErr.value = ''
+  editingProfile.value = true
+}
+
+/** 取消资料编辑：输入框回滚到服务端值，避免下次打开还留着废弃的草稿。 */
+function cancelEditProfile() {
+  nickName.value = profile.value?.user_name ?? ''
+  introduction.value = profile.value?.introduction ?? ''
+  profileErr.value = ''
+  editingProfile.value = false
+}
+
 // ---- 头像 ----
 const avatarUrl = ref('')
 const uploading = ref(false)
@@ -67,6 +93,24 @@ const emailMsg = ref('')
 const emailErr = ref('')
 
 const hasEmail = computed(() => Boolean(profile.value?.email))
+
+/** 展开绑定 / 换绑表单。每次打开都是空白，不复用上次的输入。 */
+function startEditEmail() {
+  newEmail.value = ''
+  emailPassword.value = ''
+  emailCode.value = ''
+  emailMsg.value = ''
+  emailErr.value = ''
+  editingEmail.value = true
+}
+
+function cancelEditEmail() {
+  newEmail.value = ''
+  emailPassword.value = ''
+  emailCode.value = ''
+  emailErr.value = ''
+  editingEmail.value = false
+}
 
 let emailTimer: ReturnType<typeof setInterval> | null = null
 
@@ -168,6 +212,8 @@ async function bindEmail() {
     newEmail.value = ''
     emailCode.value = ''
     emailPassword.value = ''
+    // 提交成功就收起表单：结果提示留在区块底部，不需要一直开着表单
+    editingEmail.value = false
   } catch (err) {
     emailErr.value = messageOf(err)
   } finally {
@@ -184,6 +230,11 @@ const pwdMsg = ref('')
 const pwdErr = ref('')
 
 const inputClass = 'w-full border-b border-stone-200 bg-transparent py-2.5 text-sm text-stone-900 outline-none transition-colors placeholder:text-stone-300 focus:border-stone-900 dark:border-stone-800 dark:text-stone-100 dark:placeholder:text-stone-600 dark:focus:border-stone-100'
+
+// 三个区块的按钮样式统一在这里，避免同一串 class 抄六遍
+const btnGhost = 'rounded-md border border-stone-200 px-3 py-1.5 text-xs text-stone-600 transition-colors hover:border-stone-400 hover:text-stone-900 dark:border-stone-800 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:text-stone-100'
+const btnPrimary = 'rounded-md bg-stone-900 px-3.5 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900'
+const btnText = 'text-xs text-stone-400 transition-colors hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-300'
 
 function messageOf(err: unknown): string {
   const e = err as { statusMessage?: string, data?: { message?: string } }
@@ -215,6 +266,8 @@ async function saveProfile() {
     // 昵称变了导航栏要跟着变
     if (user.value) user.value = { ...user.value, name: nickName.value.trim() }
     await refresh()
+    // 保存成功收起表单，回到只读展示
+    editingProfile.value = false
   } catch (err) {
     profileErr.value = messageOf(err)
   } finally {
@@ -252,6 +305,24 @@ async function uploadAvatar(event: Event) {
   }
 }
 
+/** 展开改密表单。密码字段一律留空，不预填。 */
+function startEditPwd() {
+  oldPassword.value = ''
+  newPassword.value = ''
+  ackPassword.value = ''
+  pwdMsg.value = ''
+  pwdErr.value = ''
+  editingPwd.value = true
+}
+
+function cancelEditPwd() {
+  oldPassword.value = ''
+  newPassword.value = ''
+  ackPassword.value = ''
+  pwdErr.value = ''
+  editingPwd.value = false
+}
+
 /** 改密码。 */
 async function changePassword() {
   if (changingPwd.value) return
@@ -285,6 +356,8 @@ async function changePassword() {
     oldPassword.value = ''
     newPassword.value = ''
     ackPassword.value = ''
+    // 改完收起表单，提示留在区块里
+    editingPwd.value = false
   } catch (err) {
     pwdErr.value = messageOf(err)
   } finally {
@@ -344,13 +417,64 @@ useSeoMeta({ title: '个人设置' })
       </div>
     </section>
 
-    <!-- 基本资料 -->
+    <!-- 基本资料：默认只读展示，点「编辑」才出现输入框 -->
     <section class="mt-12">
-      <h2 class="font-serif text-base font-semibold text-stone-900 dark:text-stone-100">
-        基本资料
-      </h2>
+      <div class="flex items-center justify-between">
+        <h2 class="font-serif text-base font-semibold text-stone-900 dark:text-stone-100">
+          基本资料
+        </h2>
 
-      <div class="mt-6 space-y-6">
+        <button
+          v-if="!editingProfile"
+          type="button"
+          :class="btnGhost"
+          @click="startEditProfile"
+        >
+          编辑
+        </button>
+        <button
+          v-else
+          type="button"
+          :class="btnText"
+          @click="cancelEditProfile"
+        >
+          取消
+        </button>
+      </div>
+
+      <!-- 展示态 -->
+      <dl
+        v-if="!editingProfile"
+        class="mt-6 grid grid-cols-[4.5rem_1fr] gap-y-5 text-sm"
+      >
+        <dt class="pt-0.5 text-xs text-stone-400 dark:text-stone-500">
+          昵称
+        </dt>
+        <dd class="text-stone-900 dark:text-stone-100">
+          {{ profile.user_name }}
+        </dd>
+
+        <dt class="pt-0.5 text-xs text-stone-400 dark:text-stone-500">
+          简介
+        </dt>
+        <dd class="leading-relaxed text-stone-700 dark:text-stone-300">
+          {{ profile.introduction || '还没写简介' }}
+        </dd>
+
+        <dt class="pt-0.5 text-xs text-stone-400 dark:text-stone-500">
+          账号
+        </dt>
+        <dd class="text-stone-500 dark:text-stone-400">
+          {{ profile.account }}
+          <span class="ml-2 text-xs text-stone-400 dark:text-stone-600">不可修改</span>
+        </dd>
+      </dl>
+
+      <!-- 编辑态 -->
+      <div
+        v-else
+        class="mt-6 space-y-6"
+      >
         <div>
           <label class="text-xs text-stone-400 dark:text-stone-500">昵称</label>
           <input
@@ -374,51 +498,80 @@ useSeoMeta({ title: '个人设置' })
           />
         </div>
 
-        <div>
-          <label class="text-xs text-stone-400 dark:text-stone-500">账号</label>
-          <p class="py-2.5 text-sm text-stone-400 dark:text-stone-600">
-            {{ profile.account }}（不可修改）
-          </p>
-        </div>
-      </div>
+        <p class="text-xs text-stone-400 dark:text-stone-600">
+          账号 {{ profile.account }} 不可修改
+        </p>
 
-      <div class="mt-6 flex items-center gap-4">
         <button
           type="button"
           :disabled="savingProfile"
-          class="rounded-md bg-stone-900 px-4 py-2 text-xs font-medium text-white
-                 transition-opacity hover:opacity-90 disabled:opacity-50
-                 dark:bg-stone-100 dark:text-stone-900"
+          :class="btnPrimary"
           @click="saveProfile"
         >
-          {{ savingProfile ? '保存中…' : '保存资料' }}
+          {{ savingProfile ? '保存中…' : '保存' }}
         </button>
-        <span
-          v-if="profileMsg"
-          class="text-xs text-emerald-600 dark:text-emerald-500"
-        >
-          {{ profileMsg }}
-        </span>
-        <span
-          v-if="profileErr"
-          class="text-xs text-rose-600 dark:text-rose-400"
-        >
-          {{ profileErr }}
-        </span>
       </div>
+
+      <p
+        v-if="profileMsg"
+        class="mt-4 text-xs text-emerald-600 dark:text-emerald-500"
+      >
+        {{ profileMsg }}
+      </p>
+      <p
+        v-if="profileErr"
+        class="mt-4 text-xs text-rose-600 dark:text-rose-400"
+      >
+        {{ profileErr }}
+      </p>
     </section>
 
-    <!-- 邮箱 -->
-    <section class="mt-14 border-t border-stone-200 pt-10 dark:border-stone-800">
-      <h2 class="font-serif text-base font-semibold text-stone-900 dark:text-stone-100">
-        邮箱
-      </h2>
-      <p class="mt-2 text-xs text-stone-400 dark:text-stone-500">
-        当前：
-        <span class="text-stone-600 dark:text-stone-400">{{ profile.email || '未绑定' }}</span>
+    <!-- 邮箱：展示当前邮箱，点按钮才展开绑定 / 换绑表单 -->
+    <section class="mt-12 border-t border-stone-200 pt-10 dark:border-stone-800">
+      <div class="flex items-center justify-between">
+        <h2 class="font-serif text-base font-semibold text-stone-900 dark:text-stone-100">
+          邮箱
+        </h2>
+
+        <button
+          v-if="!editingEmail"
+          type="button"
+          :class="btnGhost"
+          @click="startEditEmail"
+        >
+          {{ hasEmail ? '换绑' : '绑定邮箱' }}
+        </button>
+        <button
+          v-else
+          type="button"
+          :class="btnText"
+          @click="cancelEditEmail"
+        >
+          取消
+        </button>
+      </div>
+
+      <!-- 展示态 -->
+      <p
+        v-if="!editingEmail"
+        class="mt-5 text-sm"
+      >
+        <span :class="hasEmail ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400 dark:text-stone-500'">
+          {{ profile.email || '未绑定' }}
+        </span>
+        <span
+          v-if="!hasEmail"
+          class="ml-3 text-xs text-stone-400 dark:text-stone-600"
+        >
+          绑定后可用邮箱验证码登录、找回密码
+        </span>
       </p>
 
-      <div class="mt-5 space-y-4">
+      <!-- 编辑态 -->
+      <div
+        v-else
+        class="mt-5 space-y-4"
+      >
         <!-- 换绑才需要密码：证明操作者是本人 -->
         <input
           v-if="hasEmail"
@@ -451,61 +604,92 @@ useSeoMeta({ title: '个人设置' })
           </button>
         </div>
 
-        <!-- 验证码 + 提交 -->
-        <div class="flex items-end gap-3">
-          <input
-            v-model="emailCode"
-            type="text"
-            inputmode="numeric"
-            maxlength="6"
-            autocomplete="one-time-code"
-            placeholder="6 位验证码"
-            :class="[inputClass, 'min-w-0 flex-1']"
-          >
-          <button
-            type="button"
-            :disabled="bindingEmail"
-            class="shrink-0 rounded-md border border-stone-200 px-3 py-2 text-xs text-stone-600
-                   transition-colors hover:border-stone-400 hover:text-stone-900 disabled:opacity-50
-                   dark:border-stone-800 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:text-stone-100"
-            @click="bindEmail"
-          >
-            {{ bindingEmail ? '提交中…' : hasEmail ? '申请换绑' : '绑定' }}
-          </button>
-        </div>
-      </div>
+        <!-- 验证码 -->
+        <input
+          v-model="emailCode"
+          type="text"
+          inputmode="numeric"
+          maxlength="6"
+          autocomplete="one-time-code"
+          placeholder="6 位验证码"
+          :class="inputClass"
+        >
 
-      <p class="mt-3 text-[11px] leading-relaxed text-stone-400 dark:text-stone-600">
-        <template v-if="hasEmail">
-          换绑分两步：验证码发到<strong class="font-normal text-stone-500 dark:text-stone-400">当前邮箱</strong>（证明是本人），
-          校验通过后再给<strong class="font-normal text-stone-500 dark:text-stone-400">新邮箱</strong>发确认链接，点链接才生效。
-        </template>
-        <template v-else>
-          验证码会发到你要绑定的邮箱，填进来即可完成绑定。
-        </template>
-      </p>
+        <p class="text-[11px] leading-relaxed text-stone-400 dark:text-stone-600">
+          <template v-if="hasEmail">
+            换绑分两步：验证码发到<strong class="font-normal text-stone-500 dark:text-stone-400">当前邮箱</strong>（证明是本人），
+            校验通过后再给<strong class="font-normal text-stone-500 dark:text-stone-400">新邮箱</strong>发确认链接，点链接才生效。
+          </template>
+          <template v-else>
+            验证码会发到你要绑定的邮箱，填进来即可完成绑定。
+          </template>
+        </p>
+
+        <button
+          type="button"
+          :disabled="bindingEmail"
+          :class="btnPrimary"
+          @click="bindEmail"
+        >
+          {{ bindingEmail ? '提交中…' : hasEmail ? '申请换绑' : '绑定' }}
+        </button>
+      </div>
 
       <p
         v-if="emailMsg"
-        class="mt-3 text-xs text-emerald-600 dark:text-emerald-500"
+        class="mt-4 text-xs text-emerald-600 dark:text-emerald-500"
       >
         {{ emailMsg }}
       </p>
       <p
         v-if="emailErr"
-        class="mt-3 text-xs text-rose-600 dark:text-rose-400"
+        class="mt-4 text-xs text-rose-600 dark:text-rose-400"
       >
         {{ emailErr }}
       </p>
     </section>
 
-    <!-- 密码 -->
-    <section class="mt-14 border-t border-stone-200 pt-10 dark:border-stone-800">
-      <h2 class="font-serif text-base font-semibold text-stone-900 dark:text-stone-100">
-        修改密码
-      </h2>
+    <!-- 密码：默认只显示状态，点「修改密码」才出现表单 -->
+    <section class="mt-12 border-t border-stone-200 pt-10 dark:border-stone-800">
+      <div class="flex items-center justify-between">
+        <h2 class="font-serif text-base font-semibold text-stone-900 dark:text-stone-100">
+          密码
+        </h2>
 
-      <div class="mt-6 space-y-5">
+        <button
+          v-if="!editingPwd"
+          type="button"
+          :class="btnGhost"
+          @click="startEditPwd"
+        >
+          修改密码
+        </button>
+        <button
+          v-else
+          type="button"
+          :class="btnText"
+          @click="cancelEditPwd"
+        >
+          取消
+        </button>
+      </div>
+
+      <!-- 展示态 -->
+      <p
+        v-if="!editingPwd"
+        class="mt-5 text-sm text-stone-500 dark:text-stone-400"
+      >
+        ********
+        <span class="ml-3 text-xs text-stone-400 dark:text-stone-600">
+          注册于 {{ formatDate(profile.create_at) }}
+        </span>
+      </p>
+
+      <!-- 编辑态 -->
+      <div
+        v-else
+        class="mt-5 space-y-5"
+      >
         <input
           v-model="oldPassword"
           type="password"
@@ -527,35 +711,28 @@ useSeoMeta({ title: '个人设置' })
           placeholder="确认新密码"
           :class="inputClass"
         >
-      </div>
 
-      <div class="mt-6 flex items-center gap-4">
         <button
           type="button"
           :disabled="changingPwd"
-          class="rounded-md border border-stone-200 px-4 py-2 text-xs text-stone-600
-                 transition-colors hover:border-stone-400 hover:text-stone-900 disabled:opacity-50
-                 dark:border-stone-800 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:text-stone-100"
+          :class="btnPrimary"
           @click="changePassword"
         >
-          {{ changingPwd ? '提交中…' : '修改密码' }}
+          {{ changingPwd ? '提交中…' : '确认修改' }}
         </button>
-        <span
-          v-if="pwdMsg"
-          class="text-xs text-emerald-600 dark:text-emerald-500"
-        >
-          {{ pwdMsg }}
-        </span>
-        <span
-          v-if="pwdErr"
-          class="text-xs text-rose-600 dark:text-rose-400"
-        >
-          {{ pwdErr }}
-        </span>
       </div>
 
-      <p class="mt-6 text-xs text-stone-400 dark:text-stone-600">
-        注册于 {{ formatDate(profile.create_at) }}
+      <p
+        v-if="pwdMsg"
+        class="mt-4 text-xs text-emerald-600 dark:text-emerald-500"
+      >
+        {{ pwdMsg }}
+      </p>
+      <p
+        v-if="pwdErr"
+        class="mt-4 text-xs text-rose-600 dark:text-rose-400"
+      >
+        {{ pwdErr }}
       </p>
     </section>
   </div>
